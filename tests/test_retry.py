@@ -40,7 +40,9 @@ async def test_non_retryable_fails_fast():
         raise ValueError("bug")
 
     with pytest.raises(ValueError):
-        await with_retries(bad, attempts=5, retry_on=lambda e: isinstance(e, RuntimeError), sleep=_nosleep)
+        await with_retries(
+            bad, attempts=5, retry_on=lambda e: isinstance(e, RuntimeError), sleep=_nosleep
+        )
     assert calls["n"] == 1
 
 

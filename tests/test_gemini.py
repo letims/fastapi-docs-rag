@@ -64,7 +64,7 @@ async def test_generate_tolerates_missing_text_and_usage(install):
     assert (res.text, res.input_tokens, res.output_tokens) == ("", 0, 0)
 
 
-@pytest.mark.parametrize("code", [429, 500, 503])
+@pytest.mark.parametrize("code", [500, 503])
 async def test_transient_errors_are_retried(install, code):
     models = install(api_error(code), api_error(code), reply("ok"))
     res = await g.GeminiLLM("k", "m").generate("p")
@@ -79,7 +79,7 @@ async def test_client_errors_fail_fast(install):
 
 
 async def test_retries_eventually_give_up(install):
-    models = install(*[api_error(429)] * 6)
+    models = install(*[api_error(503)] * 6)
     with pytest.raises(errors.APIError):
         await g.GeminiLLM("k", "m").generate("p")
     assert len(models.calls) == 6
@@ -90,9 +90,27 @@ def test_retryable_ignores_non_api_errors():
 
 
 async def test_embeddings_are_normalized_and_dimension_requested(install):
-    models = install(SimpleNamespace(embeddings=[SimpleNamespace(values=[3.0, 4.0]), SimpleNamespace(values=[0.0, 0.0])]))
+    models = install(
+        SimpleNamespace(
+            embeddings=[SimpleNamespace(values=[3.0, 4.0]), SimpleNamespace(values=[0.0, 0.0])]
+        )
+    )
     vecs = await g.GeminiEmbedder("k", "em", dim=2).embed(["a", "b"], kind="query")
     assert vecs[0] == pytest.approx([0.6, 0.8])
     assert vecs[1] == [0.0, 0.0]  # zero vector must not divide by zero
     assert models.calls[0]["config"].output_dimensionality == 2
     assert models.calls[0]["contents"] == ["a", "b"] and models.calls[0]["model"] == "em"
+
+
+async def test_429_is_not_retried_by_the_adapter(install):
+    """Backing off ~1s against a quota only burns more of it: the Governor handles 429s."""
+    models = install(api_error(429), reply("never"))
+    with pytest.raises(errors.APIError):
+        await g.GeminiLLM("k", "m").generate("p")
+    assert len(models.calls) == 1
+
+
+def test_is_rate_limited_only_matches_429():
+    assert g.is_rate_limited(api_error(429)) is True
+    assert g.is_rate_limited(api_error(500)) is False
+    assert g.is_rate_limited(ValueError("x")) is False

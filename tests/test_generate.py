@@ -36,7 +36,9 @@ async def test_citations_are_deduped_sorted_and_range_checked():
 
 
 async def test_abstention_is_detected_and_has_no_citations():
-    ans = await generate_answer(StubLLM(f"  {NO_ANSWER} The docs never mention gRPC."), "q", make_hits())
+    ans = await generate_answer(
+        StubLLM(f"  {NO_ANSWER} The docs never mention gRPC."), "q", make_hits()
+    )
     assert ans.abstained and ans.citations == []
 
 

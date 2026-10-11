@@ -1,7 +1,7 @@
 """Ingestion workers: N asyncio tasks claiming jobs from Postgres.
 
-    python -m app.worker --drain            # process everything queued, then exit
-    python -m app.worker --concurrency 8    # keep polling forever
+python -m app.worker --drain            # process everything queued, then exit
+python -m app.worker --concurrency 8    # keep polling forever
 """
 
 import argparse
@@ -14,6 +14,7 @@ from app.db import build_vector_index, close_pool, init_schema, open_pool
 from app.ingest import queue
 from app.ingest.pipeline import ingest_document
 from app.providers import get_embedder
+from app.quota import QuotaExhausted, seconds_until_reset
 
 log = logging.getLogger("worker")
 
@@ -29,7 +30,16 @@ async def _has_live_jobs(pool) -> bool:
     return row["x"]
 
 
-async def worker_loop(name: str, pool, embedder, counters: dict, drain: bool) -> None:
+async def _keepalive(pool, job_id: int, every_s: float) -> None:
+    """Renew the job's lock every `every_s` seconds until cancelled (see `queue.heartbeat`)."""
+    while True:
+        await asyncio.sleep(every_s)
+        await queue.heartbeat(pool, job_id)
+
+
+async def worker_loop(
+    name: str, pool, embedder, counters: dict, drain: bool, stop: asyncio.Event | None = None
+) -> None:
     """One worker: claim a job, ingest it, record the outcome, repeat.
 
     Failures are caught per job and handed to `queue.fail`, which schedules a retry or marks the
@@ -37,15 +47,21 @@ async def worker_loop(name: str, pool, embedder, counters: dict, drain: bool) ->
     `job_max_attempts` times (e.g. repeatedly abandoned by crashed workers) is failed without
     being run.
 
+    If the daily API budget runs out (`QuotaExhausted`), the job is put back WITHOUT burning an
+    attempt, scheduled for the quota reset, and `stop` is set so every worker stops cleanly.
+
     Args:
         name: Label used in log lines (e.g. "w0").
         pool: Open connection pool.
         embedder: Provider used to embed chunks.
         counters: Shared dict of totals, updated in place (safe: asyncio is single-threaded).
         drain: If true, return once no pending or running jobs remain; otherwise poll forever.
+        stop: Shared flag. Set by the first worker to hit `QuotaExhausted`; all workers then return.
     """
     s = get_settings()
     while True:
+        if stop is not None and stop.is_set():
+            return
         job = await queue.claim(pool, s.job_visibility_timeout_s)
         if job is None:
             if drain and not await _has_live_jobs(pool):
@@ -53,9 +69,14 @@ async def worker_loop(name: str, pool, embedder, counters: dict, drain: bool) ->
             await asyncio.sleep(1.0)  # idle, or waiting on a retry's run_after
             continue
         if job["attempts"] > s.job_max_attempts:  # crashed workers burn attempts too
-            await queue.fail(pool, job["id"], "max attempts exceeded", job["attempts"], s.job_max_attempts)
+            await queue.fail(
+                pool, job["id"], "max attempts exceeded", job["attempts"], s.job_max_attempts
+            )
             counters["failed"] += 1
             continue
+        keepalive = asyncio.create_task(
+            _keepalive(pool, job["id"], max(s.job_visibility_timeout_s / 3, 0.1))
+        )
         try:
             res = await ingest_document(
                 pool,
@@ -70,13 +91,37 @@ async def worker_loop(name: str, pool, embedder, counters: dict, drain: bool) ->
             counters[res.status] += 1
             counters["chunks_embedded"] += res.chunks_embedded
             counters["chunks_reused"] += res.chunks_reused
-            log.info("%s %s %s (%d chunks, %d embedded)", name, res.status, job["source"],
-                     res.chunks_total, res.chunks_embedded)
+            log.info(
+                "%s %s %s (%d chunks, %d embedded)",
+                name,
+                res.status,
+                job["source"],
+                res.chunks_total,
+                res.chunks_embedded,
+            )
+        except QuotaExhausted as e:
+            await queue.release(pool, job["id"], delay_s=seconds_until_reset())
+            counters["paused"] += 1
+            log.warning(
+                "%s: %s; put %s back in the queue and stopping all workers", name, e, job["source"]
+            )
+            if stop is not None:
+                stop.set()
+            return
         except Exception as e:  # noqa: BLE001
-            will_retry = await queue.fail(pool, job["id"], repr(e), job["attempts"], s.job_max_attempts)
+            will_retry = await queue.fail(
+                pool, job["id"], repr(e), job["attempts"], s.job_max_attempts
+            )
             counters["retried" if will_retry else "failed"] += 1
-            log.warning("%s error on %s: %r (%s)", name, job["source"], e,
-                        "will retry" if will_retry else "giving up")
+            log.warning(
+                "%s error on %s: %r (%s)",
+                name,
+                job["source"],
+                e,
+                "will retry" if will_retry else "giving up",
+            )
+        finally:
+            keepalive.cancel()
 
 
 async def main() -> None:
@@ -94,13 +139,34 @@ async def main() -> None:
     pool = await open_pool(max_size=args.concurrency + 2)
     await init_schema(pool)
     embedder = get_embedder()
-    counters = {k: 0 for k in
-                ("ingested", "skipped", "retried", "failed", "chunks_embedded", "chunks_reused")}
+    counters = {
+        k: 0
+        for k in (
+            "ingested",
+            "skipped",
+            "retried",
+            "failed",
+            "paused",
+            "chunks_embedded",
+            "chunks_reused",
+        )
+    }
+    stop = asyncio.Event()
     t0 = time.perf_counter()
     await asyncio.gather(
-        *(worker_loop(f"w{i}", pool, embedder, counters, args.drain) for i in range(args.concurrency))
+        *(
+            worker_loop(f"w{i}", pool, embedder, counters, args.drain, stop)
+            for i in range(args.concurrency)
+        )
     )
     elapsed = time.perf_counter() - t0
+    if stop.is_set():
+        log.warning(
+            "Stopped early: the daily API budget is used up. Unprocessed jobs stay queued and become "
+            "eligible again at the quota reset (in %.1f h). Embeddings already computed are cached, "
+            "so re-running pays for nothing twice. See `make quota`.",
+            seconds_until_reset() / 3600,
+        )
     if args.drain:
         await build_vector_index(pool)
         log.info("done in %.1fs: %s", elapsed, counters)

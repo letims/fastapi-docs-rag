@@ -12,7 +12,9 @@ async def test_schema_and_index_creation_are_idempotent(pool):
     await db.build_vector_index(pool)
     async with pool.connection() as c:
         row = await (
-            await c.execute("SELECT count(*) AS n FROM pg_indexes WHERE indexname='chunks_embedding_hnsw'")
+            await c.execute(
+                "SELECT count(*) AS n FROM pg_indexes WHERE indexname='chunks_embedding_hnsw'"
+            )
         ).fetchone()
     assert row["n"] == 1
 

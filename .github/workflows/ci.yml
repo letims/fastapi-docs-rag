@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+      - run: uv sync --locked   # fails if uv.lock is out of date with pyproject.toml
+      - name: Lint and format (same as the pre-commit hook)
+        run: uv run ruff check . && uv run ruff format --check .
       - name: Tests + coverage gate (fails under 90%)
         run: uv run pytest -q --cov --cov-report=term-missing --cov-report=html --cov-report=xml
       - uses: actions/upload-artifact@v4

@@ -32,7 +32,9 @@ async def test_documents_are_enqueued_once(client):
 
 async def test_ask_validates_input(client):
     assert (await client.post("/ask", json={"question": "hi"})).status_code == 422
-    assert (await client.post("/ask", json={"question": "valid question", "k": 0})).status_code == 422
+    assert (
+        await client.post("/ask", json={"question": "valid question", "k": 0})
+    ).status_code == 422
 
 
 async def test_ask_end_to_end_with_fake_provider(client, pool):
@@ -41,7 +43,9 @@ async def test_ask_end_to_end_with_fake_provider(client, pool):
         ("static.md", "Static Files", "Serve static files from a directory with StaticFiles."),
         ("cors.md", "CORS", "Allow cross origin requests from a browser frontend."),
     ]:
-        await ingest_document(pool, emb, source=source, title=title, content=f"# {title}\n\n## Body\n\n{body}")
+        await ingest_document(
+            pool, emb, source=source, title=title, content=f"# {title}\n\n## Body\n\n{body}"
+        )
     r = await client.post("/ask", json={"question": "how do I serve static files", "k": 2})
     assert r.status_code == 200
     body = r.json()
@@ -49,3 +53,20 @@ async def test_ask_end_to_end_with_fake_provider(client, pool):
     assert body["answer"].startswith("[fake llm]") and body["abstained"] is False
     assert body["citations"] == [] and body["usage"]["input_tokens"] > 0
     assert body["latency_s"] >= 0
+
+
+async def test_exhausted_quota_becomes_http_429_with_retry_after(client, monkeypatch):
+    import app.main as main_mod
+    from app.quota import QuotaExhausted
+
+    class Boom:
+        async def generate(self, *a, **k):
+            raise QuotaExhausted("llm", "daily budget of 100 used up")
+
+    monkeypatch.setattr(main_mod, "get_llm", lambda: Boom())
+    r = await client.post("/ask", json={"question": "how do I serve static files"})
+    assert r.status_code == 429
+    body = r.json()
+    assert body["error"] == "quota_exhausted" and "used up" in body["detail"]
+    assert 0 < body["retry_after_s"] <= 25 * 3600
+    assert r.headers["retry-after"] == str(body["retry_after_s"])

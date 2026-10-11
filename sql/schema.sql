@@ -43,3 +43,11 @@ CREATE TABLE IF NOT EXISTS ingest_jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS ingest_jobs_live_source
   ON ingest_jobs(source) WHERE status IN ('pending','running');
 CREATE INDEX IF NOT EXISTS ingest_jobs_claim_idx ON ingest_jobs(status, run_after);
+
+-- Client-side daily request counter (see app/quota.py). One row per (Pacific day, api).
+CREATE TABLE IF NOT EXISTS api_usage (
+  day      DATE NOT NULL,
+  api      TEXT NOT NULL,            -- 'embed' | 'llm'
+  requests INT  NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, api)
+);

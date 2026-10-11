@@ -61,6 +61,8 @@ async def with_retries(
             if attempt == attempts - 1 or not retry_on(e):
                 raise
             delay = backoff_delay(attempt, base, cap)
-            log.warning("retrying after %s (attempt %d/%d, sleeping %.1fs)", e, attempt + 1, attempts, delay)
+            log.warning(
+                "retrying after %s (attempt %d/%d, sleeping %.1fs)", e, attempt + 1, attempts, delay
+            )
             await sleep(delay)
     raise AssertionError("unreachable")

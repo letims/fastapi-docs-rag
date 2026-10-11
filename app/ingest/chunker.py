@@ -106,7 +106,7 @@ def _sections(text: str) -> list[tuple[list[str], list[str]]]:
 
     def end_block():
         nonlocal cur
-        if any(l.strip() for l in cur):
+        if any(line.strip() for line in cur):
             blocks.append(cur)
         cur = []
 
@@ -198,7 +198,7 @@ def chunk_markdown(text: str, title: str, max_chars: int = 1800) -> list[Chunk]:
         buf: list[str] = []
         size = 0
 
-        def flush():
+        def flush(heading=heading):  # bound now: the closure is only used inside this iteration
             nonlocal buf, size
             if buf:
                 chunks.append(Chunk(len(chunks), heading, "\n\n".join(buf)))

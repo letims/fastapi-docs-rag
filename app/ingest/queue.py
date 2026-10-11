@@ -65,6 +65,18 @@ async def claim(pool: AsyncConnectionPool, visibility_timeout_s: int) -> dict | 
         return await cur.fetchone()
 
 
+async def heartbeat(pool: AsyncConnectionPool, job_id: int) -> None:
+    """Renew a running job's lock so a slow-but-alive worker is not mistaken for a crashed one.
+
+    Without this, a job that legitimately waits on a rate limiter for longer than the visibility
+    timeout gets claimed by a second worker and embedded twice.
+    """
+    async with pool.connection() as conn:
+        await conn.execute(
+            "UPDATE ingest_jobs SET locked_at=now() WHERE id=%s AND status='running'", (job_id,)
+        )
+
+
 async def complete(pool: AsyncConnectionPool, job_id: int) -> None:
     """Mark a job done and clear its lock and last error.
 
@@ -114,6 +126,26 @@ async def fail(
             (error[:2000], delay, job_id),
         )
     return True
+
+
+async def release(pool: AsyncConnectionPool, job_id: int, delay_s: float) -> None:
+    """Put a claimed job back WITHOUT burning an attempt.
+
+    Used when the daily API budget runs out: the job did nothing wrong, so it must not count toward
+    `max_attempts`.
+
+    Args:
+        pool: Open connection pool.
+        job_id: The job's id, from `claim`.
+        delay_s: Seconds until the job may be claimed again (time until the quota resets).
+    """
+    async with pool.connection() as conn:
+        await conn.execute(
+            "UPDATE ingest_jobs SET status='pending', attempts=GREATEST(attempts-1, 0), "
+            "locked_at=NULL, run_after=now() + make_interval(secs => %s), updated_at=now() "
+            "WHERE id=%s",
+            (delay_s, job_id),
+        )
 
 
 async def stats(pool: AsyncConnectionPool) -> dict:

@@ -13,10 +13,19 @@ import pytest
 
 import app.db as db
 import app.providers as providers
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.providers.fake import FakeEmbedder
 
 DIM = 64
+
+
+@pytest.fixture(autouse=True)
+def _ignore_dotenv(monkeypatch):
+    """Tests must not depend on (or leak) the developer's real `.env`: keys, providers, limits."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture(scope="session")
@@ -45,7 +54,7 @@ async def pool(db_url, monkeypatch):
     db._pool = None
     p = await db.open_pool()
     async with p.connection() as c:
-        await c.execute("DROP TABLE IF EXISTS chunks, documents, ingest_jobs CASCADE")
+        await c.execute("DROP TABLE IF EXISTS chunks, documents, ingest_jobs, api_usage CASCADE")
     await db.init_schema(p)
     yield p
     await db.close_pool()

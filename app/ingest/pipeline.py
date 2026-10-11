@@ -114,8 +114,14 @@ async def ingest_document(
                     "INSERT INTO chunks(document_id, chunk_index, heading, content, content_hash, "
                     "embedding) VALUES (%s, %s, %s, %s, %s, %s::vector)",
                     [
-                        (doc_id, c.index, c.heading, c.content, c.content_hash,
-                         embeddings[c.content_hash])
+                        (
+                            doc_id,
+                            c.index,
+                            c.heading,
+                            c.content,
+                            c.content_hash,
+                            embeddings[c.content_hash],
+                        )
                         for c in chunks
                     ],
                 )

@@ -12,3 +12,6 @@ htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+.cache/
+evals/results/vector-1791725096.json
+WALKTHROUGH.md

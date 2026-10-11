@@ -67,7 +67,10 @@ async def test_enqueue_dedupes_live_jobs(pool):
 
 
 async def test_concurrent_workers_process_each_job_exactly_once(pool, emb):
-    docs = [(f"d{i}.md", f"Doc {i}", f"# Doc {i}\n\n## S\n\nunique words number{i} here") for i in range(30)]
+    docs = [
+        (f"d{i}.md", f"Doc {i}", f"# Doc {i}\n\n## S\n\nunique words number{i} here")
+        for i in range(30)
+    ]
     assert await queue.enqueue_many(pool, docs) == 30
     counters = defaultdict(int)
     import asyncio
@@ -107,13 +110,25 @@ async def test_complete_marks_done_and_clears_lock(pool):
     job = await queue.claim(pool, 300)
     await queue.complete(pool, job["id"])
     assert (await queue.stats(pool))["jobs"] == {"done": 1}
-    assert await queue.enqueue_many(pool, [("a.md", "A", "y")]) == 1  # done jobs don't block re-enqueue
+    assert (
+        await queue.enqueue_many(pool, [("a.md", "A", "y")]) == 1
+    )  # done jobs don't block re-enqueue
 
 
 async def test_vector_search_returns_the_right_document(pool, emb):
     await _ingest(pool, emb)
-    await _ingest(pool, emb, "static.md", "# Static Files\n\n## Mount\n\nServe static files from a directory with StaticFiles.")
-    await _ingest(pool, emb, "cors.md", "# CORS\n\n## Origins\n\nAllow cross origin requests from a browser frontend.")
+    await _ingest(
+        pool,
+        emb,
+        "static.md",
+        "# Static Files\n\n## Mount\n\nServe static files from a directory with StaticFiles.",
+    )
+    await _ingest(
+        pool,
+        emb,
+        "cors.md",
+        "# CORS\n\n## Origins\n\nAllow cross origin requests from a browser frontend.",
+    )
     hits = await vector_search(pool, emb, "how do I serve static files from a directory", k=3)
     assert hits[0].source == "static.md"
     assert hits[0].score >= hits[1].score

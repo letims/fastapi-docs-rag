@@ -1,11 +1,13 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.db import close_pool, init_schema, open_pool
 from app.ingest import queue
 from app.providers import get_embedder, get_llm
+from app.quota import QuotaExhausted, seconds_until_reset
 from app.rag.generate import generate_answer
 from app.rag.retrieve import vector_search
 
@@ -23,6 +25,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ragnarok", lifespan=lifespan)
+
+
+@app.exception_handler(QuotaExhausted)
+async def quota_exhausted_handler(_request, exc: QuotaExhausted):
+    """Map an exhausted daily API budget to HTTP 429 with a Retry-After header (seconds to reset)."""
+    retry_after = int(seconds_until_reset())
+    return JSONResponse(
+        status_code=429,
+        content={"error": "quota_exhausted", "detail": str(exc), "retry_after_s": retry_after},
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 class DocIn(BaseModel):
@@ -74,7 +87,9 @@ async def add_documents(docs: list[DocIn]):
     Returns:
         `{"received": <docs in the request>, "enqueued": <new jobs actually created>}`.
     """
-    created = await queue.enqueue_many(app.state.pool, [(d.source, d.title, d.content) for d in docs])
+    created = await queue.enqueue_many(
+        app.state.pool, [(d.source, d.title, d.content) for d in docs]
+    )
     return {"received": len(docs), "enqueued": created}
 
 

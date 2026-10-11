@@ -10,6 +10,7 @@ class LLMResult:
     text: str
     input_tokens: int = 0
     output_tokens: int = 0
+    cached: bool = False  # served from the disk cache: cost no API request
 
 
 class LLM(Protocol):

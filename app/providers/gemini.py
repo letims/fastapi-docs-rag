@@ -9,10 +9,16 @@ from app.retry import with_retries
 from .base import LLMResult
 
 
+def is_rate_limited(e: BaseException) -> bool:
+    """True for a 429. NOT retried by this adapter: backing off ~1s is useless against a per-minute
+    or daily quota and hammering makes it worse. `app.quota.Governor` owns 429 handling (cool-down
+    once, then pause)."""
+    return isinstance(e, errors.APIError) and e.code == 429
+
+
 def _retryable(e: BaseException) -> bool:
-    """True for Gemini errors worth retrying: rate limits (429) and server errors (5xx)."""
-    # 429 = rate limited, 5xx = transient server trouble. Everything else is our bug: fail fast.
-    return isinstance(e, errors.APIError) and (e.code == 429 or (e.code or 0) >= 500)
+    """True only for transient Gemini server errors (5xx). Anything else is our bug or a quota."""
+    return isinstance(e, errors.APIError) and (e.code or 0) >= 500
 
 
 class GeminiLLM:
@@ -25,7 +31,7 @@ class GeminiLLM:
     async def generate(
         self, prompt: str, *, system: str = "", json: bool = False, temperature: float = 0.0
     ) -> LLMResult:
-        """Generate text from a prompt, retrying 429/5xx errors with backoff.
+        """Generate text from a prompt, retrying transient 5xx errors with backoff (429s are handled by the Governor).
 
         Args:
             prompt: The user prompt.

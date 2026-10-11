@@ -28,7 +28,9 @@ def build_prompt(question: str, hits: list[Hit]) -> str:
     Returns:
         The prompt text: numbered context passages (with source and heading) then the question.
     """
-    ctx = "\n\n".join(f"[{i}] ({h.source} :: {h.heading})\n{h.content}" for i, h in enumerate(hits, 1))
+    ctx = "\n\n".join(
+        f"[{i}] ({h.source} :: {h.heading})\n{h.content}" for i, h in enumerate(hits, 1)
+    )
     return f"Context passages:\n\n{ctx}\n\nQuestion: {question}"
 
 
@@ -44,6 +46,7 @@ class Answer:
     input_tokens: int = 0
     output_tokens: int = 0
     latency_s: float = 0.0
+    cached: bool = False  # answer came from the disk cache (cost no API request)
     trace: list[dict] = field(default_factory=list)
 
 
@@ -75,4 +78,5 @@ async def generate_answer(llm: LLM, question: str, hits: list[Hit]) -> Answer:
         input_tokens=res.input_tokens,
         output_tokens=res.output_tokens,
         latency_s=time.perf_counter() - t0,
+        cached=res.cached,
     )
