@@ -12,10 +12,14 @@ Gemini free tier behind provider interfaces · LangGraph (Phase 3) · uv · pyte
 - `make up` / `make down`: Postgres via docker compose (host port 5433)
 - `make corpus`: fetch FastAPI docs into `corpus/` (gitignored)
 - `make enqueue` then `make worker`: queue and embed the corpus
-- `make api`: run the API · `make eval`: retrieval metrics · `make test` · `make lint`
+- `make api`: run the API · `make eval`: retrieval metrics · `make lint`
+- `make test`: full suite + coverage. **Fails under 90% (line+branch)**; HTML report in `htmlcov/index.html`
+  (`make cov-open`). `make test-fast`: no coverage, stops at first failure.
 - Offline dev with no API key: `PROVIDER=fake`. The fake embedder is bag-of-words hashing:
   good for plumbing, NOT a quality baseline. Never report eval numbers from it.
-- Integration tests need a DB: `RAGNAROK_TEST_DB=<conninfo> uv run pytest` (drops app tables!)
+- DB tests use `RAGNAROK_TEST_DB=<conninfo>` if set (DROPS the app tables there), otherwise a throwaway
+  Postgres+pgvector from the `pgserver` dev dependency (no Docker needed). They fail loudly, never skip.
+- New code needs tests in the same change; do not lower `fail_under` or add `omit`s to pass the gate.
 
 ## Conventions
 - Rest of the app depends on `app/providers/base.py` interfaces only. Model IDs live in config.

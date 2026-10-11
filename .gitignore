@@ -1,8 +1,14 @@
 .env
 .venv/
+.vscode/
 __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
 corpus/
 .DS_Store
+
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml

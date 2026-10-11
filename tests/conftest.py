@@ -1,0 +1,58 @@
+"""Shared fixtures.
+
+DB-backed tests need Postgres + pgvector:
+  1. RAGNAROK_TEST_DB=<conninfo>  (e.g. the compose DB: postgresql://ragnarok:ragnarok@localhost:5433/ragnarok).
+     WARNING: the app tables in that database are DROPPED on every test.
+  2. Otherwise a throwaway Postgres is started with the `pgserver` dev dependency (no Docker).
+If neither works the DB tests ERROR on purpose: silently skipping them would let the coverage gate
+pass or fail for the wrong reasons."""
+
+import os
+
+import pytest
+
+import app.db as db
+import app.providers as providers
+from app.config import get_settings
+from app.providers.fake import FakeEmbedder
+
+DIM = 64
+
+
+@pytest.fixture(scope="session")
+def db_url(tmp_path_factory):
+    url = os.getenv("RAGNAROK_TEST_DB")
+    if url:
+        yield url
+        return
+    try:
+        import pgserver
+    except ImportError:
+        pytest.fail("No test database: set RAGNAROK_TEST_DB or run `uv sync` (installs pgserver).")
+    srv = pgserver.get_server(tmp_path_factory.mktemp("pgdata"), cleanup_mode="delete")
+    yield srv.get_uri()
+    srv.cleanup()
+
+
+@pytest.fixture
+async def pool(db_url, monkeypatch):
+    """Fresh schema on every test, with the offline fake provider (no API key, deterministic)."""
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("PROVIDER", "fake")
+    monkeypatch.setenv("EMBED_DIM", str(DIM))
+    get_settings.cache_clear()
+    providers._cache.clear()
+    db._pool = None
+    p = await db.open_pool()
+    async with p.connection() as c:
+        await c.execute("DROP TABLE IF EXISTS chunks, documents, ingest_jobs CASCADE")
+    await db.init_schema(p)
+    yield p
+    await db.close_pool()
+    get_settings.cache_clear()
+    providers._cache.clear()
+
+
+@pytest.fixture
+def emb():
+    return FakeEmbedder(DIM)

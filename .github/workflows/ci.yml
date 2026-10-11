@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: ragnarok, POSTGRES_PASSWORD: ragnarok, POSTGRES_DB: ragnarok }
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ragnarok" --health-interval 3s
+          --health-timeout 3s --health-retries 20
+    env:
+      RAGNAROK_TEST_DB: postgresql://ragnarok:ragnarok@localhost:5433/ragnarok
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Tests + coverage gate (fails under 90%)
+        run: uv run pytest -q --cov --cov-report=term-missing --cov-report=html --cov-report=xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: coverage-html, path: htmlcov }

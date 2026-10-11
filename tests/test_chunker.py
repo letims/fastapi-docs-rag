@@ -94,3 +94,40 @@ def test_whole_corpus_chunks_sanely():
             assert len(c.content) <= 1900, (p, len(c.content))
             assert c.content.count("```") % 2 == 0, p
     assert total > len(files)
+
+
+def test_unclosed_front_matter_is_left_alone():
+    chunks = chunk_markdown("---\nnot closed\n\n# T\n\nbody", "T")
+    assert any("not closed" in c.content for c in chunks)
+
+
+def test_extract_title_falls_back_when_no_h1():
+    assert extract_title("no heading at all", "fb") == "fb"
+    assert extract_title("## only a subsection\n", "fb") == "fb"
+
+
+def test_skipped_heading_levels_still_build_a_breadcrumb():
+    chunks = chunk_markdown("# T\n\n### Deep\n\ntext", "T")
+    assert chunks[0].heading == "T > Deep"
+
+
+def test_single_pathological_line_is_hard_split_without_loss():
+    chunks = chunk_markdown("# T\n\n## S\n\n" + "x" * 5000, "T", max_chars=1000)
+    assert all(len(c.content) <= 1000 for c in chunks)
+    assert sum(len(c.content.replace("\n", "")) for c in chunks) == 5000
+
+
+def test_oversize_plain_paragraph_splits_on_line_boundaries():
+    para = "\n".join(f"line {i:03d} " + "y" * 90 for i in range(30))
+    chunks = chunk_markdown(f"# T\n\n## S\n\n{para}", "T", max_chars=500)
+    assert len(chunks) > 3 and all(len(c.content) <= 500 for c in chunks)
+
+
+def test_tilde_fences_are_kept_balanced_when_split():
+    big = "# T\n\n## S\n\n~~~text\n" + "\n".join(f"row {i}" for i in range(300)) + "\n~~~\n"
+    chunks = chunk_markdown(big, "T", max_chars=400)
+    assert len(chunks) > 3 and all(c.content.count("~~~") % 2 == 0 for c in chunks)
+
+
+def test_blank_document_yields_no_chunks():
+    assert chunk_markdown("\n\n   \n", "T") == []
