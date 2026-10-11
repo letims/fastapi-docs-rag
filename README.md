@@ -1,22 +1,50 @@
 # fastapi-docs-rag
 
-An agentic RAG system over the FastAPI documentation, built to answer one question honestly:
+A retrieval-augmented generation (RAG) system over the FastAPI documentation: it ingests the docs,
+answers questions with citations to the pages it used, and says "I can't tell from these docs" when
+the answer is not there. Its real subject is the failure case:
 **what happens when the first retrieval pass is not enough, and how do you know it got better?**
 
+## About
+
+**Context.** Most RAG demos stop the moment a question gets a plausible answer. The interesting
+engineering starts after that: loading tens of thousands of documents without duplicating work or
+losing jobs, noticing that the retrieved passages do not actually answer the question, trying again
+in a controlled way, and proving with numbers that each change helped. The FastAPI docs make a good
+test bed: public, well written, small enough to run on a laptop, and familiar enough that I can tell a
+good answer from a confident wrong one. Four of the eval questions are deliberately unanswerable from
+those docs, so the correct behavior is to abstain.
+
+**Goal.** Build a small but honest end-to-end system: queue-based, idempotent ingestion that could
+scale to something like 50,000 documents an hour; retrieval with citations; an agent loop that grades
+whether the evidence is sufficient and then rewrites, decomposes or widens the search under hard caps;
+and an evaluation harness so every step is measured against the last one instead of judged by feel.
+
+**Motivation.** I am a full-stack engineer learning agentic patterns by building one, and I wanted a
+project where the design decisions (queues, retries, idempotency, cost and rate limits, evaluation)
+are as visible as the model calls. It also runs entirely on free API tiers (Voyage for embeddings,
+Groq for answers), which turned quota handling into part of the design instead of an afterthought.
+
 > Status: Phase 1 is done (queue-based ingestion, baseline vector RAG, eval harness, quota-safe
-> providers). Phase 2 (hybrid search + reranking) and Phase 3 (agent loop) are next. Numbers below
+> providers). Phase 2 (hybrid search + reranking) and Phase 3 (the agent loop) are next. Numbers below
 > come only from saved runs in `evals/results/`; empty cells mean "not measured yet".
 
 ## Documentation
 
-| Page | What is in it |
-|---|---|
-| [Architecture](docs/architecture.md) | System diagram, providers, retrieval phases and the agent-loop plan |
-| [Ingestion design](docs/ingestion.md) | The queue, workers, retries, idempotency, throughput math |
-| [API quotas](docs/quotas.md) | How the project stays inside free-tier limits: limiter, daily budget, cache, pause/resume |
-| [Make commands](docs/commands.md) | What every `make` target does, in order, and the pre-commit hook |
-| [Evaluation method](docs/evaluation.md) | The 21 questions, the metrics, how to run an eval |
-| [Tests and coverage](docs/testing.md) | How to run the tests, the 90% coverage gate |
+If you want the big picture first, start with [Architecture](docs/architecture.md): it has the system
+diagram, explains how the embedding and chat providers can be swapped independently, and lays out the
+three retrieval phases and the plan for the agent loop. The part I would most like you to read is
+[Ingestion design](docs/ingestion.md), which covers why a Postgres queue is enough at this scale, how
+retries, dead-lettering and idempotency work, and the throughput math behind the 50,000-documents-an-hour
+target (the sequence diagrams for it are further down this page). Because free tiers shape so much of
+the design, [API quotas](docs/quotas.md) explains the rate limiter, the daily budget, the disk cache and
+how a run pauses and resumes instead of failing.
+
+When you want to run things, [Make commands](docs/commands.md) walks through every `make` target in the
+order you would use them, what each one needs first, and the pre-commit hook that blocks a commit on
+lint errors, failing tests or a leaked key. To understand the numbers, [Evaluation method](docs/evaluation.md)
+describes the 21 questions, the metrics and the rules for what may appear in the results table, and
+[Tests and coverage](docs/testing.md) covers the test suite and the 90% coverage gate.
 
 ## Quickstart
 
