@@ -1,0 +1,21 @@
+{"id": "q01", "type": "single", "question": "How do I run code when the application starts up and shuts down?", "expected_sources": ["advanced/events.md"]}
+{"id": "q02", "type": "single", "question": "How can I run work after returning a response so the client doesn't wait?", "expected_sources": ["tutorial/background-tasks.md"]}
+{"id": "q03", "type": "single", "question": "How do I allow a browser frontend on a different origin to call my API?", "expected_sources": ["tutorial/cors.md"]}
+{"id": "q04", "type": "single", "question": "How do I leave out fields that were not explicitly set from the response?", "expected_sources": ["tutorial/response-model.md"]}
+{"id": "q05", "type": "single", "question": "How do I write a dependency that runs cleanup code after the response using yield?", "expected_sources": ["tutorial/dependencies/dependencies-with-yield.md"]}
+{"id": "q06", "type": "single", "question": "How do I read a bearer token from the Authorization header with OAuth2?", "expected_sources": ["tutorial/security/first-steps.md"]}
+{"id": "q07", "type": "single", "question": "How do I test my FastAPI app?", "expected_sources": ["tutorial/testing.md"]}
+{"id": "q08", "type": "single", "question": "How do I test a WebSocket endpoint?", "expected_sources": ["advanced/testing-websockets.md"]}
+{"id": "q09", "type": "single", "question": "How do I package and run a FastAPI app in a Docker container?", "expected_sources": ["deployment/docker.md"]}
+{"id": "q10", "type": "single", "question": "How do I return an HTTP error with a custom status code and message?", "expected_sources": ["tutorial/handling-errors.md"]}
+{"id": "q11", "type": "single", "question": "How do I serve static files?", "expected_sources": ["tutorial/static-files.md"]}
+{"id": "q12", "type": "single", "question": "How do I apply one dependency to every path operation in the whole app?", "expected_sources": ["tutorial/dependencies/global-dependencies.md"]}
+{"id": "q13", "type": "single", "question": "Can I mount a Flask app inside my FastAPI app?", "expected_sources": ["advanced/wsgi.md"]}
+{"id": "q14", "type": "multi", "question": "How do I override a dependency during tests, and how do I create the test client?", "expected_sources": ["advanced/testing-dependencies.md", "tutorial/testing.md"]}
+{"id": "q15", "type": "multi", "question": "How do I issue a JWT at login and then get the current user from it in other endpoints?", "expected_sources": ["tutorial/security/oauth2-jwt.md", "tutorial/security/get-current-user.md"]}
+{"id": "q16", "type": "multi", "question": "Can a dependency with yield be used together with background tasks, and when does its exit code run?", "expected_sources": ["tutorial/dependencies/dependencies-with-yield.md", "tutorial/background-tasks.md"]}
+{"id": "q17", "type": "partial", "question": "How do I set up Celery workers with FastAPI for heavy background computation?", "expected_sources": ["tutorial/background-tasks.md"]}
+{"id": "q18", "type": "unanswerable", "question": "How do I integrate Stripe payments into a FastAPI app?", "expected_sources": []}
+{"id": "q19", "type": "unanswerable", "question": "How do I expose gRPC services from FastAPI?", "expected_sources": []}
+{"id": "q20", "type": "unanswerable", "question": "How do I add rate limiting to my endpoints in FastAPI?", "expected_sources": []}
+{"id": "q21", "type": "unanswerable", "question": "How do I consume Kafka topics inside a FastAPI app?", "expected_sources": []}
