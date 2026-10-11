@@ -1,4 +1,4 @@
-# ragnarok
+# fastapi-docs-rag
 
 Agentic RAG over the FastAPI docs. Built as a prototype for a take-home: ingestion at scale,
 hybrid retrieval, an agent loop that notices when retrieval was not enough, and an eval harness
@@ -19,7 +19,7 @@ Voyage (embeddings) + Groq (chat) free tiers, Gemini optional, all behind provid
   (`make cov-open`). `make test-fast`: no coverage, stops at first failure.
 - Offline dev with no API key: `PROVIDER=fake`. The fake embedder is bag-of-words hashing:
   good for plumbing, NOT a quality baseline. Never report eval numbers from it.
-- DB tests use `RAGNAROK_TEST_DB=<conninfo>` if set (DROPS the app tables there), otherwise a throwaway
+- DB tests use `TEST_DATABASE_URL=<conninfo>` if set (DROPS the app tables there), otherwise a throwaway
   Postgres+pgvector from the `pgserver` dev dependency (no Docker needed). They fail loudly, never skip.
 - New code needs tests in the same change; do not lower `fail_under` or add `omit`s to pass the gate.
 

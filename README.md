@@ -1,4 +1,4 @@
-# ragnarok
+# fastapi-docs-rag
 
 An agentic RAG system over the FastAPI documentation, built to answer one question honestly:
 **what happens when the first retrieval pass is not enough, and how do you know it got better?**
@@ -17,7 +17,6 @@ An agentic RAG system over the FastAPI documentation, built to answer one questi
 | [Make commands](docs/commands.md) | What every `make` target does, in order, and the pre-commit hook |
 | [Evaluation method](docs/evaluation.md) | The 21 questions, the metrics, how to run an eval |
 | [Tests and coverage](docs/testing.md) | How to run the tests, the 90% coverage gate |
-| [Code walkthrough](WALKTHROUGH.md) | A tour of the code for readers new to RAG |
 
 ## Quickstart
 

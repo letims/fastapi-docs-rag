@@ -1,7 +1,7 @@
 """Shared fixtures.
 
 DB-backed tests need Postgres + pgvector:
-  1. RAGNAROK_TEST_DB=<conninfo>  (e.g. the compose DB: postgresql://ragnarok:ragnarok@localhost:5433/ragnarok).
+  1. TEST_DATABASE_URL=<conninfo>  (e.g. the compose DB: postgresql://docsrag:docsrag@localhost:5433/docsrag).
      WARNING: the app tables in that database are DROPPED on every test.
   2. Otherwise a throwaway Postgres is started with the `pgserver` dev dependency (no Docker).
 If neither works the DB tests ERROR on purpose: silently skipping them would let the coverage gate
@@ -30,14 +30,14 @@ def _ignore_dotenv(monkeypatch):
 
 @pytest.fixture(scope="session")
 def db_url(tmp_path_factory):
-    url = os.getenv("RAGNAROK_TEST_DB")
+    url = os.getenv("TEST_DATABASE_URL")
     if url:
         yield url
         return
     try:
         import pgserver
     except ImportError:
-        pytest.fail("No test database: set RAGNAROK_TEST_DB or run `uv sync` (installs pgserver).")
+        pytest.fail("No test database: set TEST_DATABASE_URL or run `uv sync` (installs pgserver).")
     srv = pgserver.get_server(tmp_path_factory.mktemp("pgdata"), cleanup_mode="delete")
     yield srv.get_uri()
     srv.cleanup()

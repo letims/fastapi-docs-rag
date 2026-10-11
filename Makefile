@@ -10,7 +10,7 @@ quota:     ; uv run python -m scripts.quota
 worker:    ; uv run python -m app.worker --drain
 api:       ; uv run uvicorn app.main:app --reload
 # Full suite + coverage. FAILS if total coverage (line+branch) < 90% (see pyproject.toml).
-# Writes the HTML report to htmlcov/index.html. DB: RAGNAROK_TEST_DB if set, else pgserver.
+# Writes the HTML report to htmlcov/index.html. DB: TEST_DATABASE_URL if set, else pgserver.
 test:      ; uv run pytest -q --cov --cov-report=term-missing --cov-report=html
 test-fast: ; uv run pytest -q -x
 cov-open:  ; open htmlcov/index.html

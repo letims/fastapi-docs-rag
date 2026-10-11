@@ -1,5 +1,5 @@
 [project]
-name = "ragnarok"
+name = "fastapi-docs-rag"
 version = "0.1.0"
 description = "Agentic RAG over the FastAPI docs: idempotent queue-based ingestion, hybrid retrieval, evals"
 requires-python = ">=3.11"

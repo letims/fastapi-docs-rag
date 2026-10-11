@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="ragnarok", lifespan=lifespan)
+app = FastAPI(title="fastapi-docs-rag", lifespan=lifespan)
 
 
 @app.exception_handler(QuotaExhausted)

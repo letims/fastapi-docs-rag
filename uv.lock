@@ -1216,7 +1216,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ragnarok"
+name = "fastapi-docs-rag"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

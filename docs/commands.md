@@ -32,7 +32,7 @@ Listed in the order you would normally use them. "Needs" says what must have hap
 
 | Command | What it does | When to use it | Needs |
 |---|---|---|---|
-| `make test` | Runs the full test suite with coverage and **fails below 90%**. Writes the HTML report to `htmlcov/` | Before every commit | Nothing: it starts its own throwaway Postgres (`pgserver`), or uses `RAGNAROK_TEST_DB` if set. No API keys |
+| `make test` | Runs the full test suite with coverage and **fails below 90%**. Writes the HTML report to `htmlcov/` | Before every commit | Nothing: it starts its own throwaway Postgres (`pgserver`), or uses `TEST_DATABASE_URL` if set. No API keys |
 | `make test-fast` | Runs the tests without coverage and stops at the first failure | While developing, for a quick loop | Same as `make test` |
 | `make cov-open` | Opens the HTML coverage report in the browser (macOS `open`) | To see which lines are untested | A previous `make test` |
 | `make lint` | Checks style and formatting with ruff (changes nothing) | Before pushing | Nothing |

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql://ragnarok:ragnarok@localhost:5433/ragnarok"
+    database_url: str = "postgresql://docsrag:docsrag@localhost:5433/docsrag"
 
     provider: str = (
         "gemini"  # default vendor for both roles: gemini | fake (see EMBED_/LLM_PROVIDER)
