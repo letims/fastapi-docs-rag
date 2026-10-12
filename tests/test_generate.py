@@ -1,5 +1,5 @@
 from app.providers.base import LLMResult
-from app.rag.generate import NO_ANSWER, SYSTEM, build_prompt, generate_answer
+from app.rag.generate import NO_ANSWER, SYSTEM, build_prompt, generate_answer, parse_citations
 from app.rag.retrieve import Hit
 
 
@@ -45,3 +45,24 @@ async def test_abstention_is_detected_and_has_no_citations():
 async def test_answer_without_citations():
     ans = await generate_answer(StubLLM("Some answer."), "q", make_hits())
     assert not ans.abstained and ans.citations == []
+
+
+def test_parse_citations_accepts_common_bracket_variants():
+    assert parse_citations("a [1] b 【2】 c [1][2]", 3) == [1, 2]
+    assert parse_citations("see [1, 3] and 【2，3】 and [2,3]", 3) == [1, 2, 3]
+    assert parse_citations("[ 2 ]", 3) == [2]
+
+
+def test_parse_citations_ignores_non_citations_and_out_of_range():
+    assert parse_citations("no refs, list[int], (1), array[0], [9]", 3) == []
+    assert parse_citations("", 3) == []
+
+
+async def test_fullwidth_brackets_still_count_as_a_citation():
+    ans = await generate_answer(StubLLM("Use TestClient【2】."), "q", make_hits())
+    assert [h.source for h in ans.citations] == ["b.md"]
+
+
+def test_prompt_demands_plain_brackets_and_citations_on_partial_answers():
+    assert "plain ASCII square brackets" in SYSTEM
+    assert "Not found:" in SYSTEM

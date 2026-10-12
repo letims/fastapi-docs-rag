@@ -1,3 +1,6 @@
+# Pinned so the network, volume and container names do not depend on the folder name.
+name: fastapi-docs-rag
+
 services:
   db:
     image: pgvector/pgvector:pg16
