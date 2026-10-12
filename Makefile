@@ -1,4 +1,4 @@
-.PHONY: up down corpus init enqueue enqueue-dev quota worker api test test-fast cov-open lint fmt check install-hooks eval eval-gen
+.PHONY: up down corpus init enqueue enqueue-dev quota worker api test test-fast cov-open lint fmt check install-hooks eval eval-gen eval-agent load-test
 up:        ; docker compose up -d --wait
 down:      ; docker compose down
 corpus:    ; ./scripts/fetch_corpus.sh
@@ -21,6 +21,12 @@ fmt:       ; uv run ruff check --fix . && uv run ruff format .
 check:     ; $(MAKE) lint && $(MAKE) test
 # Point git at .githooks/ so the pre-commit hook runs on this clone. Once per clone.
 install-hooks: ; git config core.hooksPath .githooks
-eval:      ; uv run python -m evals.run_eval --mode vector
+# MODE picks the retriever: vector (default), hybrid or rerank.  Example: make eval MODE=hybrid
+MODE ?= vector
+eval:      ; uv run python -m evals.run_eval --mode $(MODE)
 # Also calls the LLM: answers, citations, abstention, tokens. Slow under Groq's free limits.
-eval-gen:  ; uv run python -m evals.run_eval --mode vector --generate
+eval-gen:  ; uv run python -m evals.run_eval --mode $(MODE) --generate
+# Phase 3 loop on top of MODE. Cheap first look: make eval-agent MODE=rerank ONLY=q14,q16,q17
+eval-agent: ; uv run python -m evals.run_eval --mode $(MODE) --agent $(if $(ONLY),--only $(ONLY))
+# Pipeline-only throughput (fake embedder, throwaway Postgres, no API or quota). See docs/ingestion.md.
+load-test: ; uv run python -m scripts.load_test --docs 1000 --concurrency 1,4,8,16

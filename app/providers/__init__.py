@@ -2,7 +2,7 @@ from app.cache import DiskCache
 from app.config import Settings, get_settings
 from app.db import open_pool
 
-from .base import LLM, Embedder
+from .base import LLM, Embedder, Reranker
 
 _cache: dict[str, object] = {}
 
@@ -135,3 +135,28 @@ def get_llm() -> LLM:
                 llm = CachedLLM(llm, get_disk_cache(), model)
         _cache["llm"] = llm
     return _cache["llm"]  # type: ignore[return-value]
+
+
+def get_reranker() -> Reranker:
+    """Return the shared reranker, wrapped like the others (cache outermost, then the governor)."""
+    if "reranker" not in _cache:
+        s = get_settings()
+        backend = s.rerank_backend
+        if backend == "fake":
+            from .fake import FakeReranker
+
+            rr: Reranker = FakeReranker()
+        elif backend == "voyage":
+            from .governed import CachedReranker, GovernedReranker
+            from .http import is_rate_limited
+            from .voyage import VoyageReranker
+
+            key = _require_key("VOYAGE_API_KEY", s.voyage_api_key)
+            limits, gov = _governor(s, "rerank", is_rate_limited)
+            rr = GovernedReranker(VoyageReranker(key, s.voyage_rerank_model), gov, limits=limits)
+            if s.api_cache:
+                rr = CachedReranker(rr, get_disk_cache(), s.voyage_rerank_model)
+        else:
+            raise ValueError(f"unknown rerank provider {backend!r} (voyage | fake)")
+        _cache["reranker"] = rr
+    return _cache["reranker"]  # type: ignore[return-value]

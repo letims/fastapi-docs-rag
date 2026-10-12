@@ -56,3 +56,24 @@ class FakeLLM:
     ) -> LLMResult:
         """Return a canned reply, estimating input tokens as len(prompt) // 4."""
         return LLMResult(text="[fake llm] no model configured", input_tokens=len(prompt) // 4)
+
+
+class FakeReranker:
+    """Offline `Reranker`: scores by shared words with the query. Deterministic, NOT a quality
+    baseline (a real cross-encoder reads query and passage together; this only counts overlap)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def rerank(
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[tuple[int, float]]:
+        """Return `(index, overlap score)` pairs, best first; ties keep the input order."""
+        self.calls += 1
+        q = set(_WORD.findall(query.lower()))
+        scored = [
+            (i, len(q & set(_WORD.findall(d.lower()))) / (len(q) or 1))
+            for i, d in enumerate(documents)
+        ]
+        scored.sort(key=lambda x: (-x[1], x[0]))
+        return scored[:top_k] if top_k is not None else scored

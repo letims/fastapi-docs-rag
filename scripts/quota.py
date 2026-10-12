@@ -17,7 +17,7 @@ from app.quota import quota_day, seconds_until_reset
 async def usage_today(pool) -> dict[str, dict[str, int]]:
     """Return {api: {"used": n, "limit": n, "remaining": n}} for the current Pacific quota day."""
     s = get_settings()
-    limits = {"embed": s.quota("embed")[2], "llm": s.quota("llm")[2]}
+    limits = {api: s.quota(api)[2] for api in ("embed", "llm", "rerank")}
     async with pool.connection() as conn:
         rows = await (
             await conn.execute("SELECT api, requests FROM api_usage WHERE day=%s", (quota_day(),))

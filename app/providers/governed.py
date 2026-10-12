@@ -5,10 +5,13 @@
 Cache is outermost so a hit costs nothing: no budget reserved, no waiting, no network."""
 
 import json as _json
+import logging
 
 from app.cache import DiskCache, make_key, pack_vector, unpack_vector
-from app.providers.base import LLM, Embedder, LLMResult
+from app.providers.base import LLM, Embedder, LLMResult, Reranker
 from app.quota import Governor, Limits, estimate_tokens
+
+log = logging.getLogger(__name__)
 
 MAX_TEXTS_PER_CALL = 100  # assumed Gemini batchEmbedContents cap; also the "call" unit upper bound
 
@@ -133,4 +136,55 @@ class CachedLLM:
                     {"text": res.text, "in": res.input_tokens, "out": res.output_tokens}
                 ).encode(),
             )
+        return res
+
+
+class GovernedReranker:
+    """One rerank call is one request; its tokens are the query plus every document.
+
+    If the candidates would not fit in a single minute of token budget, the tail is dropped (the
+    candidates arrive best-first from the first-stage search, so the tail matters least). Indexes
+    in the result still refer to the caller's original list."""
+
+    def __init__(self, inner: Reranker, governor: Governor, *, limits: Limits):
+        self.inner, self.governor, self.limits = inner, governor, limits
+
+    async def rerank(
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[tuple[int, float]]:
+        budget = self.limits.tpm - estimate_tokens(query)
+        keep, used = 0, 0
+        for d in documents:
+            n = estimate_tokens(d)
+            if keep and used + n > budget:
+                break
+            keep, used = keep + 1, used + n
+        if keep < len(documents):
+            log.warning("rerank: %d of %d candidates fit the token budget", keep, len(documents))
+        docs = documents[:keep]
+        return await self.governor.call(
+            lambda: self.inner.rerank(query, docs, top_k),
+            units=1,
+            tokens=estimate_tokens(query) + used,
+        )
+
+
+class CachedReranker:
+    """Persistent cache for rerank results, keyed by (model, query, top_k, every document)."""
+
+    def __init__(self, inner: Reranker, cache: DiskCache, model: str):
+        self.inner, self.cache, self.model = inner, cache, model
+        self.hits = self.misses = 0
+
+    async def rerank(
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[tuple[int, float]]:
+        key = make_key("rerank", self.model, str(top_k), query, *documents)
+        blob = self.cache.get(key)
+        if blob is not None:
+            self.hits += 1
+            return [(int(i), float(s)) for i, s in _json.loads(blob)]
+        res = await self.inner.rerank(query, documents, top_k)
+        self.misses += 1
+        self.cache.set(key, _json.dumps(res).encode())
         return res

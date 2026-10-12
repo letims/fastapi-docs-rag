@@ -10,6 +10,7 @@ dependencies = [
   "pydantic-settings>=2.4",
   "google-genai>=1.0",
   "httpx>=0.27",
+  "langgraph>=1.2.14",
 ]
 
 [dependency-groups]
@@ -52,3 +53,7 @@ select = ["E", "F", "I", "B", "UP"]
 # `ruff format` owns line length for code. E501 would only flag long strings, comments and
 # docstrings, which it cannot reflow; wrapping those by hand adds noise, not clarity.
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Exploratory scripts: imports must follow the env setup, and short lambdas/names are fine.
+"experiments/*" = ["E402", "E741", "E731", "B905", "B023"]

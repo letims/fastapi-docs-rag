@@ -55,6 +55,28 @@ async def test_ask_end_to_end_with_fake_provider(client, pool):
     assert body["latency_s"] >= 0
 
 
+async def test_ask_with_agent_reports_the_loop(client, pool):
+    await ingest_document(
+        pool,
+        get_embedder(),
+        source="static.md",
+        title="Static Files",
+        content="# Static Files\n\n## Body\n\nServe static files from a directory.",
+    )
+    r = await client.post(
+        "/ask", json={"question": "how do I serve static files", "k": 2, "agent": True}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    # the fake LLM cannot return grader JSON, so the loop fails open and answers after one round
+    assert body["agent"]["stop_reason"] == "grader_error" and body["agent"]["rounds"] == 1
+    assert body["agent"]["queries"] == ["how do I serve static files"]
+    assert [t["step"] for t in body["agent"]["trace"]] == ["retrieve", "grade", "answer"]
+    assert body["retrieved"][0]["source"] == "static.md" and body["usage"]["input_tokens"] > 0
+    plain = await client.post("/ask", json={"question": "how do I serve static files"})
+    assert "agent" not in plain.json()
+
+
 async def test_exhausted_quota_becomes_http_429_with_retry_after(client, monkeypatch):
     import app.main as main_mod
     from app.quota import QuotaExhausted

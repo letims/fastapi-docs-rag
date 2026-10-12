@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.config import get_settings
 from app.db import close_pool, init_schema, open_pool
 from app.ingest import queue
-from app.providers import get_embedder, get_llm
+from app.providers import get_embedder, get_llm, get_reranker
 from app.quota import QuotaExhausted, seconds_until_reset
+from app.rag.agent import run_agent
 from app.rag.generate import generate_answer
-from app.rag.retrieve import vector_search
+from app.rag.retrieve import search
 
 
 @asynccontextmanager
@@ -51,6 +53,7 @@ class AskIn(BaseModel):
 
     question: str = Field(min_length=3)
     k: int = Field(5, ge=1, le=20)  # chunks to retrieve and give the LLM as context
+    agent: bool | None = None  # run the Phase 3 agent loop; None = the AGENT_DEFAULT setting
 
 
 @app.get("/health")
@@ -93,11 +96,23 @@ async def add_documents(docs: list[DocIn]):
     return {"received": len(docs), "enqueued": created}
 
 
+def _answer_payload(ans, hits) -> dict:
+    """The parts of an /ask response shared by the plain and the agent path."""
+    return {
+        "answer": ans.text,
+        "abstained": ans.abstained,
+        "citations": [{"source": h.source, "heading": h.heading} for h in ans.citations],
+        "retrieved": [
+            {"source": h.source, "heading": h.heading, "score": round(h.score, 4)} for h in hits
+        ],
+    }
+
+
 @app.post("/ask")
 async def ask(body: AskIn):
-    """Answer a question about the FastAPI docs using vector-search RAG.
+    """Answer a question about the FastAPI docs with retrieval-augmented generation.
 
-    Embeds the question, retrieves the top `k` chunks by cosine similarity, and asks the LLM to
+    Retrieves the top `k` chunks with the configured `RETRIEVAL_MODE` (vector, hybrid or rerank), and asks the LLM to
     answer only from those chunks. If the chunks do not contain the answer the LLM replies
     `INSUFFICIENT_CONTEXT` and `abstained` is true.
 
@@ -109,19 +124,51 @@ async def ask(body: AskIn):
           - answer: the LLM's text, with `[n]` citations pointing into the retrieved passages.
           - abstained: true if the model said the context was insufficient.
           - citations: source/heading of the passages actually cited in the answer.
-          - retrieved: every retrieved passage (source, heading, cosine score), in rank order.
+          - retrieved: every retrieved passage (source, heading, score; the scale depends on the retrieval mode), in rank order.
           - usage: input/output token counts for the LLM call.
           - latency_s: LLM generation time in seconds (retrieval time is not included).
     """
-    hits = await vector_search(app.state.pool, get_embedder(), body.question, body.k)
+    s = get_settings()
+    reranker = get_reranker() if s.retrieval_mode == "rerank" else None
+    if body.agent if body.agent is not None else s.agent_default:
+        res = await run_agent(
+            app.state.pool,
+            get_embedder(),
+            get_llm(),
+            reranker,
+            body.question,
+            mode=s.retrieval_mode,
+            k=body.k,
+            candidates=s.rerank_candidates,
+            max_rounds=s.agent_max_rounds,
+            token_budget=s.agent_token_budget,
+            per_query=s.agent_per_query,
+            extra_context=s.agent_context_extra,
+        )
+        ans = res.answer
+        return {
+            **_answer_payload(ans, res.context),
+            "usage": {"input_tokens": res.input_tokens, "output_tokens": res.output_tokens},
+            "latency_s": round(res.latency_s, 2),
+            "agent": {
+                "rounds": res.rounds,
+                "stop_reason": res.stop_reason,
+                "queries": res.queries,
+                "trace": res.trace,
+            },
+        }
+    hits = await search(
+        s.retrieval_mode,
+        app.state.pool,
+        get_embedder(),
+        reranker,
+        body.question,
+        body.k,
+        s.rerank_candidates,
+    )
     ans = await generate_answer(get_llm(), body.question, hits)
     return {
-        "answer": ans.text,
-        "abstained": ans.abstained,
-        "citations": [{"source": h.source, "heading": h.heading} for h in ans.citations],
-        "retrieved": [
-            {"source": h.source, "heading": h.heading, "score": round(h.score, 4)} for h in hits
-        ],
+        **_answer_payload(ans, hits),
         "usage": {"input_tokens": ans.input_tokens, "output_tokens": ans.output_tokens},
         "latency_s": round(ans.latency_s, 2),
     }

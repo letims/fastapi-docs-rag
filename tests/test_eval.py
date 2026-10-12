@@ -86,3 +86,24 @@ async def test_eval_stops_cleanly_when_the_quota_runs_out(pool, tmp_path, monkey
     assert "used up" in data["summary"]["interrupted"]
     assert data["summary"]["llm_api_requests"] == 2  # one of the three came from the cache
     assert "STOPPED before q04" in capsys.readouterr().out
+
+
+async def test_agent_eval_records_the_loop_and_supports_only(pool, tmp_path, monkeypatch):
+    await _seed(pool)
+    monkeypatch.setattr(run_eval, "RESULTS", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["run_eval", "--k", "3", "--agent", "--only", "q01,q02,nope"])
+    await run_eval.main()
+    (out,) = tmp_path.glob("agent-vector-gen-*.json")
+    data = json.loads(out.read_text())
+    s = data["summary"]
+    assert s["agent"] is True and len(data["rows"]) == 2
+    # the fake LLM cannot grade, so every question fails open after one round
+    assert s["stop_reasons"] == {"grader_error": 2} and s["avg_rounds"] == 1.0
+    assert s["tokens_per_query"] > 0
+    assert {"rounds", "stop_reason", "queries", "trace"} <= set(data["rows"][0])
+
+
+async def test_only_with_no_match_exits(pool, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["run_eval", "--only", "zzz"])
+    with pytest.raises(SystemExit):
+        await run_eval.main()

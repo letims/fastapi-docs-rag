@@ -25,3 +25,11 @@ class Embedder(Protocol):
     async def embed(
         self, texts: list[str], *, kind: Literal["document", "query"] = "document"
     ) -> list[list[float]]: ...
+
+
+class Reranker(Protocol):
+    async def rerank(
+        self, query: str, documents: list[str], top_k: int | None = None
+    ) -> list[tuple[int, float]]:
+        """Score documents against the query; return (index into documents, score), best first."""
+        ...

@@ -13,9 +13,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://docsrag:docsrag@localhost:5433/docsrag"
 
-    provider: str = (
-        "gemini"  # default vendor for both roles: gemini | fake (see EMBED_/LLM_PROVIDER)
-    )
+    # One value for BOTH roles (mainly `fake` for offline runs, or `gemini`). Empty = each role uses
+    # its own default: Voyage for embeddings, Groq for chat. EMBED_PROVIDER / LLM_PROVIDER win.
+    provider: str = ""
     gemini_api_key: str = ""
     gemini_llm_model: str = "gemini-3.1-flash-lite"
     gemini_embed_model: str = "gemini-embedding-2"
@@ -26,10 +26,21 @@ class Settings(BaseSettings):
     job_max_attempts: int = 5
     job_visibility_timeout_s: int = 300
 
-    # Which vendor serves each role. Empty = follow PROVIDER. Mix freely, e.g.
+    # Which vendor serves each role. Empty = PROVIDER, else the role default. Mix freely, e.g.
     # EMBED_PROVIDER=voyage + LLM_PROVIDER=groq. Values: gemini | voyage | groq | openai_compat | fake
     embed_provider: str = ""
     llm_provider: str = ""
+    # Reranker: voyage | fake. Empty = voyage, or fake when embeddings are fake (offline runs).
+    rerank_provider: str = ""
+    # How many first-stage candidates the reranker sees, and which retriever the API uses.
+    rerank_candidates: int = 20
+    retrieval_mode: str = "vector"  # vector | hybrid | rerank
+    # Phase 3 agent loop (retrieve -> grade -> plan -> retrieve ... -> answer).
+    agent_default: bool = False  # /ask uses the agent unless the request says otherwise
+    agent_max_rounds: int = 3  # retrieval rounds, hard cap
+    agent_token_budget: int = 12_000  # tokens the grading steps may spend per question
+    agent_per_query: int = 3  # chunks kept per follow-up query
+    agent_context_extra: int = 4  # extra chunks in the final context beyond k
 
     voyage_api_key: str = ""
     voyage_embed_model: str = "voyage-4-lite"
@@ -49,6 +60,9 @@ class Settings(BaseSettings):
     llm_rpm: int | None = None
     llm_tpm: int | None = None
     llm_rpd: int | None = None
+    rerank_rpm: int | None = None
+    rerank_tpm: int | None = None
+    rerank_rpd: int | None = None
     # "text": each text in a batch counts as one request (cannot overshoot, whichever way the API
     # counts). "call": one batch = one request. Unset = provider preset.
     embed_quota_unit: str | None = None
@@ -78,17 +92,32 @@ class Settings(BaseSettings):
 
     @property
     def embed_backend(self) -> str:
-        """Provider serving embeddings (`EMBED_PROVIDER`, else `PROVIDER`)."""
-        return (self.embed_provider or self.provider).lower()
+        """Provider serving embeddings: `EMBED_PROVIDER`, else `PROVIDER`, else voyage."""
+        return (self.embed_provider or self.provider or "voyage").lower()
 
     @property
     def llm_backend(self) -> str:
-        """Provider serving chat completions (`LLM_PROVIDER`, else `PROVIDER`)."""
-        return (self.llm_provider or self.provider).lower()
+        """Provider serving chat completions: `LLM_PROVIDER`, else `PROVIDER`, else groq."""
+        return (self.llm_provider or self.provider or "groq").lower()
+
+    @property
+    def rerank_backend(self) -> str:
+        """Provider serving reranking (`RERANK_PROVIDER`; else voyage, or fake if embeddings are)."""
+        if self.rerank_provider:
+            return self.rerank_provider.lower()
+        return "fake" if self.embed_backend == "fake" else "voyage"
+
+    def backend(self, api: str) -> str:
+        """Provider name for "embed", "llm" or "rerank"."""
+        return {
+            "embed": self.embed_backend,
+            "llm": self.llm_backend,
+            "rerank": self.rerank_backend,
+        }[api]
 
     def quota(self, api: str) -> tuple[int, int, int]:
-        """Effective `(rpm, tpm, rpd)` for "embed" or "llm": explicit setting, else the preset."""
-        backend = self.embed_backend if api == "embed" else self.llm_backend
+        """Effective `(rpm, tpm, rpd)` for "embed", "llm" or "rerank": explicit setting, else preset."""
+        backend = self.backend(api)
         rpm, tpm, rpd, _ = QUOTA_PRESETS.get((api, backend), DEFAULT_PRESET)
         mine = (
             getattr(self, f"{api}_rpm"),
@@ -99,7 +128,7 @@ class Settings(BaseSettings):
 
     def usage_key(self, api: str) -> str:
         """Key of the daily-budget row, e.g. "embed:voyage": a provider switch never shares a counter."""
-        return f"{api}:{self.embed_backend if api == 'embed' else self.llm_backend}"
+        return f"{api}:{self.backend(api)}"
 
     @property
     def embed_unit(self) -> str:
@@ -122,6 +151,9 @@ QUOTA_PRESETS: dict[tuple[str, str], tuple[int, int, int, str]] = {
     ("embed", "gemini"): (60, 100_000, 100, "text"),
     ("llm", "gemini"): (60, 100_000, 100, "text"),
     ("embed", "voyage"): (3, 10_000, 1_000_000, "call"),
+    # Rerank: assumed to follow the same no-card Voyage limits as embeddings; NOT yet confirmed
+    # against the console (rerank is a separate model family there).
+    ("rerank", "voyage"): (3, 10_000, 1_000_000, "call"),
     ("llm", "groq"): (30, 8_000, 1_000, "text"),
     ("llm", "openai_compat"): (15, 8_000, 150, "text"),
 }
