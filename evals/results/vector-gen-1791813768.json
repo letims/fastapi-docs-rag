@@ -1,0 +1,510 @@
+{
+  "summary": {
+    "mode": "vector",
+    "k": 5,
+    "n_answerable": 17,
+    "hit@k": 1.0,
+    "full_recall@k": 0.882,
+    "mrr": 0.971,
+    "cited_ok": 0.765,
+    "false_abstain": 0.059,
+    "abstain_rate_unanswerable": 1.0,
+    "input_tokens": 20986,
+    "output_tokens": 9227,
+    "avg_latency_s": 20.15,
+    "llm_api_requests": 21
+  },
+  "rows": [
+    {
+      "id": "q01",
+      "type": "single",
+      "question": "How do I run code when the application starts up and shuts down?",
+      "expected_sources": [
+        "advanced/events.md"
+      ],
+      "retrieved": [
+        "advanced/events.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.166,
+      "answer": "To run code when a FastAPI application starts up and shuts down you can use either the **`startup`/`shutdown` event handlers** or the **`lifespan` context manager**.\n\n**1. Using `startup` and `shutdown` events**  \nDeclare functions with the event names `\"startup\"` and `\"shutdown\"`. These functions will be executed once before the app starts receiving requests and once after it has finished handling requests, respectively. All `startup` handlers must finish before the app starts serving requests, and all `shutdown` handlers run when the app is stopped.  \n[2]  \n\n**2. Using the `lifespan` parameter**  \nDefine an async function that yields once. Code before the `yield` runs at startup; code after the `yield` runs at shutdown. Pass this function to the `FastAPI` constructor via the `lifespan` parameter. This approach keeps startup and shutdown logic together and avoids global state.  \n[3]  \n\n**Important note**  \nIf you provide a `lifespan` parameter, FastAPI will **not** call the separate `startup` and `shutdown` event handlers. You must choose one approach.  \n[5]  \n\nSo, to run code at startup and shutdown, either register `startup`/`shutdown` event handlers or supply a `lifespan` context manager to the app.",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1032,
+      "output_tokens": 381,
+      "latency_s": 0.96
+    },
+    {
+      "id": "q02",
+      "type": "single",
+      "question": "How can I run work after returning a response so the client doesn't wait?",
+      "expected_sources": [
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "tutorial/background-tasks.md",
+        "advanced/advanced-dependencies.md",
+        "advanced/custom-response.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.078,
+      "answer": "You can use **background tasks** \u2013 FastAPI lets you schedule work to run *after* the response has been returned, so the client receives the response immediately and the server continues the work in the background. This is ideal for slow operations such as sending emails or processing large files, where you can return a quick response (e.g., HTTP\u202f202 \u201cAccepted\u201d) and let the background task handle the heavy lifting.  \n[1]",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1548,
+      "output_tokens": 237,
+      "latency_s": 0.64
+    },
+    {
+      "id": "q03",
+      "type": "single",
+      "question": "How do I allow a browser frontend on a different origin to call my API?",
+      "expected_sources": [
+        "tutorial/cors.md"
+      ],
+      "retrieved": [
+        "tutorial/cors.md",
+        "advanced/strict-content-type.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.058,
+      "answer": "To let a browser that is running on a different origin talk to your FastAPI API you need to enable CORS on the backend.  \nFastAPI provides a ready\u2011made `CORSMiddleware` that you add to the application and configure with the origins, methods, headers (and optionally credentials) that you want to allow.\n\n**Steps**\n\n1. **Import the middleware**  \n   ```python\n   from fastapi.middleware.cors import CORSMiddleware\n   ```\n\n2. **Create a list of allowed origins** \u2013 e.g. the URL of your frontend.  \n   ```python\n   origins = [\"http://localhost:8080\"]   # the frontend origin\n   ```\n\n3. **Add the middleware to your FastAPI app** and set the parameters you need.  \n   ```python\n   app.add_middleware(\n       CORSMiddleware,\n       allow_origins=origins,          # origins that can access the API\n       allow_methods=[\"GET\", \"POST\"],  # or [\"*\"] for all methods\n       allow_headers=[\"*\"],            # or a specific list of headers\n       allow_credentials=True,         # if you need cookies/authorization\n   )\n   ```\n\n   *The default parameters are restrictive, so you must explicitly enable the origins, methods, or headers you want to expose* [3].\n\n4. **Result** \u2013 For any request that contains an `Origin` header, the middleware will pass the request through and add the appropriate CORS headers to the response, allowing the browser to proceed with the cross\u2011origin call. This covers simple requests automatically [4].\n\nBy configuring `CORSMiddleware` as shown, a browser frontend running on a different origin (e.g., `http://localhost:8080`) will be able to call your FastAPI API at `http://localhost:8000` without the browser blocking the request.",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1268,
+      "output_tokens": 779,
+      "latency_s": 59.67
+    },
+    {
+      "id": "q04",
+      "type": "single",
+      "question": "How do I leave out fields that were not explicitly set from the response?",
+      "expected_sources": [
+        "tutorial/response-model.md"
+      ],
+      "retrieved": [
+        "tutorial/response-model.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.079,
+      "answer": "Use the `response_model_exclude_unset` flag on the path\u2011operation decorator.  \nSetting `response_model_exclude_unset=True` tells FastAPI (via Pydantic) to omit any fields that were not explicitly set in the returned data, so only the values that were actually provided are included in the JSON response. [2]",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1031,
+      "output_tokens": 180,
+      "latency_s": 0.63
+    },
+    {
+      "id": "q05",
+      "type": "single",
+      "question": "How do I write a dependency that runs cleanup code after the response using yield?",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "retrieved": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "advanced/advanced-dependencies.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.008,
+      "answer": "To create a dependency that performs cleanup **after** the response has been sent, define the dependency with a `yield` statement and place the cleanup logic after the `yield`.  \nFastAPI\u2019s default behaviour (scope `\"request\"`) runs the exit code of a `yield`\u2011based dependency **after** the response is sent to the client, so you don\u2019t need to specify any special scope unless you want a different timing.  \n\n```python\nfrom fastapi import Depends\n\ndef get_resource():\n    # Setup code\n    resource = acquire_resource()\n    try:\n        yield resource          # <-- value returned to the path operation\n    finally:\n        # Cleanup code executed after the response is sent\n        release_resource(resource)\n```\n\n- The `yield` yields the resource to the path operation function.  \n- The code in the `finally` block (or any code after the `yield`) is the cleanup that runs after the response is finished.  \n- Because the dependency\u2019s default scope is `\"request\"`, the cleanup runs after the response is sent to the client.  \n\nThis pattern follows the guidance that a dependency using `yield` should write its cleanup code after the `yield` and that the default scope ensures the exit code runs after the response [1][3][4].",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1483,
+      "output_tokens": 584,
+      "latency_s": 59.24
+    },
+    {
+      "id": "q06",
+      "type": "single",
+      "question": "How do I read a bearer token from the Authorization header with OAuth2?",
+      "expected_sources": [
+        "tutorial/security/first-steps.md"
+      ],
+      "retrieved": [
+        "tutorial/security/first-steps.md",
+        "tutorial/security/oauth2-jwt.md",
+        "tutorial/security/simple-oauth2.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.019,
+      "answer": "The OAuth2PasswordBearer dependency automatically reads the `Authorization` header, checks that it starts with `Bearer `, and returns the token string. If the header is missing or does not contain a bearer token, it immediately returns a 401\u202fUNAUTHORIZED error. This is described in the tutorial\u2019s \u201cSecurity \u2013 First Steps\u201d section, which explains that the dependency will look for the `Authorization` header, verify the `Bearer ` prefix, and return the token as a `str` [1]. The same behavior is illustrated in the OAuth2 with JWT example, where the `Authorization` header is shown to start with `Bearer ` and the token is extracted for subsequent use [2].",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1054,
+      "output_tokens": 381,
+      "latency_s": 0.78
+    },
+    {
+      "id": "q07",
+      "type": "single",
+      "question": "How do I test my FastAPI app?",
+      "expected_sources": [
+        "tutorial/testing.md"
+      ],
+      "retrieved": [
+        "tutorial/testing.md",
+        "reference/testclient.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.015,
+      "answer": "To test a FastAPI application you can use the built\u2011in **TestClient** that is powered by Starlette and HTTPX.  \nThe typical workflow is:\n\n1. **Install the HTTPX dependency** (required by TestClient)  \n   ```bash\n   $ uv add httpx\n   ```  \n   (see the note in the tutorial)\u30105\u3011.\n\n2. **Import the client** \u2013 either from FastAPI or directly from Starlette.  \n   ```python\n   from fastapi.testclient import TestClient   # or\n   # from starlette.testclient import TestClient\n   ```  \n   (import example)\u30102\u3011\u30105\u3011.\n\n3. **Create a TestClient instance** by passing your FastAPI app object.  \n   ```python\n   client = TestClient(app)   # `app` is the FastAPI instance defined in your main module\n   ```  \n   (described in the tutorial)\u30105\u3011.\n\n4. **Write test functions** that start with `test_` (the standard `pytest` convention).  \n   These functions are ordinary `def` functions, not `async def`, and the client calls are normal calls, not awaited.  \n   ```python\n   def test_read_main():\n       response = client.get(\"/\")\n       assert response.status_code == 200\n       assert response.json() == {\"message\": \"Hello World\"}\n   ```  \n   (the tutorial explains that tests are normal `def` and calls are not awaited)\u30105\u3011.\n\n5. **Run the tests with pytest** \u2013 the TestClient behaves like an HTTPX client, so you can use standard Python assertions.  \n   ```bash\n   $ pytest\n   ```  \n   (FastAPI supports pytest directly)\u30101\u3011\u30105\u3011.\n\n6. **Organise tests** \u2013 keep them in separate files or modules if your application grows.  \n   A typical file structure might look like:  \n   ```\n   .\n   \u251c\u2500\u2500 app\n   \u2502   \u251c\u2500\u2500 __init__.py\n   \u2502   \u2514\u2500\u2500 main.py   # contains the FastAPI app\n   \u2514\u2500\u2500 tests\n       \u2514\u2500\u2500 test_main.py   # contains the TestClient tests\n   ```  \n   (the tutorial shows a similar structure)\u30104\u3011\u30103\u3011.\n\n7. **Advanced usage** \u2013 if you need to call async functions (e.g., async database helpers) inside your tests, refer to the *Async Tests* section of the advanced tutorial.  \n   (mentioned in the tutorial)\u30105\u3011.\n\nIn short, install `httpx`, import `TestClient`, create a client with your app, write normal `def` test functions that use the client to send requests, and assert the responses. This approach lets you test FastAPI routes without starting a real HTTP server.",
+      "abstained": false,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 821,
+      "output_tokens": 831,
+      "latency_s": 1.39
+    },
+    {
+      "id": "q08",
+      "type": "single",
+      "question": "How do I test a WebSocket endpoint?",
+      "expected_sources": [
+        "advanced/testing-websockets.md"
+      ],
+      "retrieved": [
+        "advanced/testing-websockets.md",
+        "advanced/websockets.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.016,
+      "answer": "To test a WebSocket endpoint you can use FastAPI\u2019s `TestClient` just like you would for HTTP routes.  \nWrap the client in a `with` statement, call its `ws_connect()` method to open a WebSocket session, and then send and receive messages through that connection. This approach is documented in the FastAPI testing guide and relies on Starlette\u2019s WebSocket testing utilities. [1]",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 932,
+      "output_tokens": 926,
+      "latency_s": 57.94
+    },
+    {
+      "id": "q09",
+      "type": "single",
+      "question": "How do I package and run a FastAPI app in a Docker container?",
+      "expected_sources": [
+        "deployment/docker.md"
+      ],
+      "retrieved": [
+        "deployment/docker.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.011,
+      "answer": "To package and run a FastAPI application in a Docker container you can follow these steps:\n\n1. **Create the project layout**  \n   Place your FastAPI code in an `app` directory (or use a single\u2011file `main.py` if you prefer).  \n   Example structure for a package layout:  \n   ```\n   .\n   \u251c\u2500\u2500 app\n   \u2502   \u251c\u2500\u2500 __init__.py\n   \u2502   \u2514\u2500\u2500 main.py\n   \u251c\u2500\u2500 Dockerfile\n   \u2514\u2500\u2500 requirements.txt\n   ```  \n   (See [4]).\n\n2. **Write a `Dockerfile`**  \n   ```dockerfile\n   # (1)!  Start from the official Python image\n   FROM python:3.14\n\n   # (2)!  Set working directory\n   WORKDIR /code\n\n   # (3)!  Copy only the requirements file first\n   COPY ./requirements.txt /code/requirements.txt\n\n   # (4)!  Install dependencies (uses Docker cache)\n   RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt\n\n   # (5)!  Copy the application code\n   COPY ./app /code/app\n\n   # (6)!  Run the FastAPI app\n   CMD [\"fastapi\", \"run\", \"app/main.py\", \"--port\", \"80\"]\n   ```  \n   (See [3] for the full Dockerfile and explanations of each step).\n\n   If you have a single\u2011file `main.py` instead of an `app` package, adjust the Dockerfile accordingly: copy `main.py` directly and run it with `fastapi run main.py`. (See [1]).\n\n3. **Build the Docker image**  \n   From the directory containing the `Dockerfile` run:  \n   ```bash\n   docker build -t myimage .\n   ```  \n   The trailing `.` tells Docker to use the current directory as the build context. (See [5]).\n\n4. **Run the container**  \n   ```bash\n   docker run -p 80:80 myimage\n   ```  \n   This exposes the FastAPI app on port\u202f80 inside the container and maps it to port\u202f80 on the host.\n\nThese steps package your FastAPI application into a reproducible Docker image and run it with the `fastapi run` command.",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1407,
+      "output_tokens": 579,
+      "latency_s": 1.01
+    },
+    {
+      "id": "q10",
+      "type": "single",
+      "question": "How do I return an HTTP error with a custom status code and message?",
+      "expected_sources": [
+        "tutorial/handling-errors.md"
+      ],
+      "retrieved": [
+        "tutorial/handling-errors.md",
+        "reference/status.md",
+        "advanced/response-change-status-code.md",
+        "tutorial/response-status-code.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.011,
+      "answer": "Use FastAPI\u2019s `HTTPException` to return an error response.  \nNot found: how to specify a custom status code and message.",
+      "abstained": false,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 625,
+      "output_tokens": 330,
+      "latency_s": 0.91
+    },
+    {
+      "id": "q11",
+      "type": "single",
+      "question": "How do I serve static files?",
+      "expected_sources": [
+        "tutorial/static-files.md"
+      ],
+      "retrieved": [
+        "tutorial/static-files.md",
+        "how-to/custom-docs-ui-assets.md",
+        "reference/staticfiles.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.011,
+      "answer": "To serve static files in FastAPI you:\n\n1. **Import the `StaticFiles` class** \u2013 it can be imported from `fastapi.staticfiles` (or directly from Starlette) [4][5].\n2. **Mount a `StaticFiles()` instance on a path** \u2013 this tells FastAPI to serve files from a directory when that path is requested. The typical pattern is to mount it on a URL prefix such as `/static` and point it to the folder that contains your assets [5].\n3. **(Optional) Use `app.frontend()`** \u2013 if you\u2019re hosting a frontend, FastAPI offers a helper that internally mounts `StaticFiles` and adds extra conveniences for client\u2011side routing [1].\n\nExample (illustrated in the docs):\n\n```python\nfrom fastapi import FastAPI\nfrom fastapi.staticfiles import StaticFiles\n\napp = FastAPI()\n\n# Serve files from the \"static\" directory at the \"/static\" URL path\napp.mount(\"/static\", StaticFiles(directory=\"static\"), name=\"static\")\n```\n\nThis setup automatically serves any file under the `static` folder when a request is made to `/static/<filename>`.",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 570,
+      "output_tokens": 442,
+      "latency_s": 57.57
+    },
+    {
+      "id": "q12",
+      "type": "single",
+      "question": "How do I apply one dependency to every path operation in the whole app?",
+      "expected_sources": [
+        "tutorial/dependencies/global-dependencies.md"
+      ],
+      "retrieved": [
+        "tutorial/dependencies/global-dependencies.md",
+        "tutorial/dependencies/dependencies-in-path-operation-decorators.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.01,
+      "answer": "To apply a dependency to every path operation in the whole app, add it as a global dependency on the `FastAPI` application itself.  \nWhen you pass a `dependencies` list to the `FastAPI` constructor (or set it on the app instance), that dependency will be executed for **all** path operations in the application. The same rules that apply to dependencies added on individual path\u2011operation decorators also apply here.  \n\n[1]  \n[2]",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 768,
+      "output_tokens": 433,
+      "latency_s": 1.39
+    },
+    {
+      "id": "q13",
+      "type": "single",
+      "question": "Can I mount a Flask app inside my FastAPI app?",
+      "expected_sources": [
+        "advanced/wsgi.md"
+      ],
+      "retrieved": [
+        "advanced/wsgi.md",
+        "advanced/sub-applications.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.01,
+      "answer": "Yes \u2013 you can mount a Flask application inside a FastAPI app by wrapping the Flask app with `WSGIMiddleware` (from the `a2wsgi` package) and mounting it under a path. This is the same approach used for other WSGI apps such as Django, and the example in the docs shows a Flask app being served under `/v1/` while the rest of the routes are handled by FastAPI.  \n\n- Use `WSGIMiddleware` from `a2wsgi` to wrap the Flask app.  \n- Mount the wrapped app under the desired path in your FastAPI application.  \n\nThis is described in the WSGI section and the mounting example: [1], [2], [5].",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 745,
+      "output_tokens": 313,
+      "latency_s": 0.7
+    },
+    {
+      "id": "q14",
+      "type": "multi",
+      "question": "How do I override a dependency during tests, and how do I create the test client?",
+      "expected_sources": [
+        "advanced/testing-dependencies.md",
+        "tutorial/testing.md"
+      ],
+      "retrieved": [
+        "advanced/testing-dependencies.md",
+        "advanced/settings.md"
+      ],
+      "hit": true,
+      "full_recall": false,
+      "rank": 1,
+      "retrieval_s": 0.008,
+      "answer": "To override a dependency in tests you use the FastAPI application\u2019s `dependency_overrides` dictionary.  \nPlace the original dependency function as the key and the override function as the value; FastAPI will call the override instead of the original during the test run.  \nYou can set the override at the start of a test (inside the test function) and clear it at the end by assigning an empty dictionary to `app.dependency_overrides`\u202f[4].\n\n**Example pattern**\n\n```python\ndef test_something():\n    # set the override\n    app.dependency_overrides[original_dependency] = override_dependency\n\n    # run your test (e.g., using a test client)\n\n    # reset overrides\n    app.dependency_overrides = {}\n```\n\n---\n\n**Creating the test client**\n\nINSUFFICIENT_CONTEXT  \nThe provided passages do not describe how to create a FastAPI test client.",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 860,
+      "output_tokens": 315,
+      "latency_s": 57.81
+    },
+    {
+      "id": "q15",
+      "type": "multi",
+      "question": "How do I issue a JWT at login and then get the current user from it in other endpoints?",
+      "expected_sources": [
+        "tutorial/security/oauth2-jwt.md",
+        "tutorial/security/get-current-user.md"
+      ],
+      "retrieved": [
+        "tutorial/security/oauth2-jwt.md",
+        "tutorial/security/simple-oauth2.md",
+        "tutorial/security/get-current-user.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.006,
+      "answer": "To issue a JWT at login and then retrieve the current user in other endpoints you do the following:\n\n1. **Create and return a JWT when the user logs in** \u2013 generate a token that contains the user\u2019s identifying information (e.g., username or user id) and return it to the client.  \n2. **Use a dependency that extracts the token from the `Authorization` header** \u2013 the `oauth2_scheme` dependency pulls the bearer token from the header.  \n3. **Decode and verify the JWT inside a `get_current_user` dependency** \u2013 this dependency receives the token from `oauth2_scheme`, decodes it, verifies its signature and expiration, and then loads the corresponding user from the database. If the token is invalid, it immediately returns an HTTP error.  \n4. **Inject `get_current_user` (or a further `get_current_active_user`) into any endpoint that needs the authenticated user** \u2013 FastAPI will call the dependency, give you the user object, and you can use it in your path operation.  \n\nThe token is sent in subsequent requests via the `Authorization` header with a value that starts with `Bearer `, so the dependency can read it automatically. This flow is described in the tutorial sections on JWT handling and dependency injection [1], [4], and [5].",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": false,
+      "input_tokens": 1005,
+      "output_tokens": 843,
+      "latency_s": 2.19
+    },
+    {
+      "id": "q16",
+      "type": "multi",
+      "question": "Can a dependency with yield be used together with background tasks, and when does its exit code run?",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "advanced/advanced-dependencies.md",
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "hit": true,
+      "full_recall": false,
+      "rank": 2,
+      "retrieval_s": 0.008,
+      "answer": "Yes \u2013 a dependency that uses `yield` can be combined with a background task.  \nThe exit code of that dependency runs **after the background task has finished**, which is effectively **after the response has been sent to the client**. This behaviour was intentional so that the objects yielded by the dependency can still be used inside the background task; the exit code is executed only once the background task is done and the response has left the server.  \n\nIn FastAPI\u202f0.106.0 the behaviour was changed to avoid holding resources while the response travels over the network, but the exit code still runs after the response is sent and after the background task completes.  \n\n[1]",
+      "abstained": false,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 1652,
+      "output_tokens": 869,
+      "latency_s": 58.46
+    },
+    {
+      "id": "q17",
+      "type": "partial",
+      "question": "How do I set up Celery workers with FastAPI for heavy background computation?",
+      "expected_sources": [
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "tutorial/background-tasks.md",
+        "deployment/server-workers.md",
+        "deployment/docker.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.013,
+      "answer": "INSUFFICIENT_CONTEXT  \nThe provided passages mention that Celery can be used for heavy background computation and that it requires a message/job queue manager such as RabbitMQ or Redis, but they do not include the specific steps or configuration details needed to set up Celery workers with FastAPI.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 1451,
+      "output_tokens": 300,
+      "latency_s": 1.53
+    },
+    {
+      "id": "q18",
+      "type": "unanswerable",
+      "question": "How do I integrate Stripe payments into a FastAPI app?",
+      "expected_sources": [],
+      "retrieved": [
+        "tutorial/first-steps.md",
+        "index.md",
+        "alternatives.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null,
+      "retrieval_s": 0.013,
+      "answer": "INSUFFICIENT_CONTEXT  \nThe provided passages do not contain any information about integrating Stripe payments into a FastAPI application.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 624,
+      "output_tokens": 101,
+      "latency_s": 58.07
+    },
+    {
+      "id": "q19",
+      "type": "unanswerable",
+      "question": "How do I expose gRPC services from FastAPI?",
+      "expected_sources": [],
+      "retrieved": [
+        "advanced/websockets.md",
+        "reference/fastapi.md",
+        "features.md",
+        "advanced/behind-a-proxy.md",
+        "index.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null,
+      "retrieval_s": 0.012,
+      "answer": "INSUFFICIENT_CONTEXT  \nThe provided passages do not contain any information about exposing gRPC services from FastAPI.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 712,
+      "output_tokens": 109,
+      "latency_s": 1.09
+    },
+    {
+      "id": "q20",
+      "type": "unanswerable",
+      "question": "How do I add rate limiting to my endpoints in FastAPI?",
+      "expected_sources": [],
+      "retrieved": [
+        "features.md",
+        "reference/fastapi.md",
+        "tutorial/security/index.md",
+        "reference/dependencies.md",
+        "reference/middleware.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null,
+      "retrieval_s": 0.01,
+      "answer": "INSUFFICIENT_CONTEXT  \nThe provided passages do not contain any information about adding rate limiting to FastAPI endpoints.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 808,
+      "output_tokens": 198,
+      "latency_s": 0.6
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "question": "How do I consume Kafka topics inside a FastAPI app?",
+      "expected_sources": [],
+      "retrieved": [
+        "tutorial/stream-json-lines.md",
+        "advanced/websockets.md",
+        "tutorial/server-sent-events.md",
+        "async.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null,
+      "retrieval_s": 0.008,
+      "answer": "INSUFFICIENT_CONTEXT  \nThe provided passages do not contain any information about consuming Kafka topics in a FastAPI application.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 590,
+      "output_tokens": 96,
+      "latency_s": 0.63
+    }
+  ]
+}

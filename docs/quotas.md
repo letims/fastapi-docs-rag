@@ -6,6 +6,7 @@ instead of reacting to errors. Current presets (`QUOTA_PRESETS` in `app/config.p
 | Role | Provider | Requests/min | Tokens/min | Requests/day | Notes |
 |---|---|---|---|---|---|
 | Embeddings | Voyage (no card) | 3 (assumed) | 10K (assumed) | none | A batch counts as one request. A run at `EMBED_RPM=2 EMBED_TPM=3000` finished with no 429s. Adding a payment method raises the limits to 2,000 RPM and 16M TPM for `voyage-4-lite` |
+| Rerank | Voyage (no card) | 3 (assumed) | 10K (assumed) | none | **Not confirmed** for the rerank model; assumed to match embeddings. One request per question, about 3,000 tokens (20 candidates). A 21-question eval took about 20 minutes (about one request per minute: the local limiter's token estimate is high for 20 candidates). Counter `rerank:voyage` |
 | Chat | Groq (gpt-oss) | 30 | 8K | 1,000 | A 200K tokens/day cap also exists and is not modeled |
 | Both | Gemini free tier | 60 | 100K | 100 | Fallback, not benchmarked |
 

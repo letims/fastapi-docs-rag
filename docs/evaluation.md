@@ -25,7 +25,16 @@ so several can come from one document and k=5 chunks may cover only 2 or 3 docum
 ```bash
 make eval        # retrieval only: needs the embedding key, cheap; prints [i/N] progress and time left
 make eval-gen    # + answers, citations, abstention: also calls the chat model (slow on Groq's free tier)
+
+make eval MODE=hybrid      # vector + full-text, fused with RRF (no extra API calls: queries are cached)
+make eval MODE=rerank      # + cross-encoder rerank (one rerank request per question; about 20 min for 21 questions on the free tier)
+make eval-gen MODE=rerank  # the same retriever, with answers
+make eval-agent MODE=rerank ONLY=q14,q16,q17   # Phase 3 loop, only the known failures (cheap first look)
+make eval-agent MODE=rerank                    # all 21 questions (several LLM calls each: mind Groq's daily cap)
 ```
+
+`MODE` defaults to `vector`. Each mode saves its own file (`hybrid-<time>.json`, ...), so runs
+compare side by side in the README table.
 
 Both save a JSON file in `evals/results/` (summary plus one row per question with the retrieved
 sources). Question embeddings and answers are cached on disk, so a rerun is nearly free. Disable the

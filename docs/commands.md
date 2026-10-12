@@ -25,8 +25,10 @@ Listed in the order you would normally use them. "Needs" says what must have hap
 | Command | What it does | When to use it | Needs |
 |---|---|---|---|
 | `make api` | Runs the FastAPI app on http://localhost:8000 (`/docs` for the UI, `POST /ask` for questions) | To ask questions by hand | A finished `make worker` (otherwise there is nothing to retrieve), plus embedding and chat keys |
-| `make eval` | Runs the 21 eval questions through retrieval and prints hit rate and MRR, with a `[i/N]` progress line and time left. Saves the run in `evals/results/` | After any change to retrieval, so every change has a measured effect | A finished `make worker`, embedding key. It does not need `make api` |
-| `make eval-gen` | Same, plus answers, citations and abstention (calls the LLM) | To measure answer quality, abstention and tokens per query | Same as `make eval`, plus the chat key (Groq limits make it slow) |
+| `make eval` | Runs the 21 eval questions through retrieval (`MODE=vector` by default; `make eval MODE=hybrid` or `MODE=rerank` for the Phase 2 retrievers) and prints hit rate and MRR, with a `[i/N]` progress line and time left. Saves the run in `evals/results/` | After any change to retrieval, so every change has a measured effect | A finished `make worker`, embedding key. It does not need `make api` |
+| `make eval-agent` | Phase 3: runs the agent loop on top of `MODE` for each question; `ONLY=q14,q16,q17` restricts it. Saves `agent-<mode>-gen-*.json` with rounds, stop reasons and the trace | To measure what the loop adds, and its token cost | Same as `make eval-gen` |
+| `make eval-gen` | Same, plus answers, citations and abstention (calls the LLM) | To measure answer quality, abstention and tokens per query | Same as `make eval`, plus the chat key (Groq limits make it slow). Also takes `MODE=` |
+| `make load-test` | Ingests 1,000 generated docs at 1, 4, 8 and 16 workers with a fake embedder and prints docs/s and chunks/s | To measure the pipeline itself, separate from the API quota | Nothing: uses a throwaway Postgres (`pgserver`), not the Docker database. Needs `corpus/` (`make corpus`) for realistic text, else uses synthetic text |
 
 ## 4. Check the code
 
