@@ -17,6 +17,9 @@ that contain the answer (`expected_sources`).
 | abstain rate | on the 4 unanswerable questions; should be 100% | yes |
 | tokens/query, latency | cost and speed of the full answer | yes |
 
+Agent runs (`--agent`) add per-question `rounds`, `stop_reason`, the queries tried and the `trace`, and
+the summary adds average rounds, tokens per question and a count of stop reasons.
+
 hit@k, full_recall@k and MRR are computed over the 17 answerable questions. The top-k are chunks,
 so several can come from one document and k=5 chunks may cover only 2 or 3 documents.
 
@@ -31,6 +34,7 @@ make eval MODE=rerank      # + cross-encoder rerank (one rerank request per ques
 make eval-gen MODE=rerank  # the same retriever, with answers
 make eval-agent MODE=rerank ONLY=q14,q16,q17   # Phase 3 loop, only the known failures (cheap first look)
 make eval-agent MODE=rerank                    # all 21 questions (several LLM calls each: mind Groq's daily cap)
+RERANK_MAX_PER_SOURCE=2 make eval MODE=rerank  # rerank with the per-document cap (settings are read from the environment)
 ```
 
 `MODE` defaults to `vector`. Each mode saves its own file (`hybrid-<time>.json`, ...), so runs

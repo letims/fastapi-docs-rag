@@ -28,7 +28,7 @@ flowchart LR
         direction TB
         Q1["Question"]
         Q2["Embed query"]
-        Q3["Vector search<br/>cosine, top-k chunks"]
+        Q3["Retrieve top-k chunks<br/>vector, hybrid or rerank<br/>(optional agent loop)"]
         Q4["LLM answers from the chunks only<br/>cites [n] or abstains"]
         Q5["Answer + citations"]
         Q1 --> Q2 --> Q3 --> Q4 --> Q5
@@ -71,6 +71,13 @@ Three retrievers share one entry point (`search()` in `app/rag/retrieve.py`), se
 | `hybrid` | vector top 20 plus Postgres full-text top 20 (`tsvector`, GIN, OR-style query, `ts_rank_cd`), fused with Reciprocal Rank Fusion (`1/(60+rank)` per list) | exact words and identifiers (`HTTPException`, `response_model_exclude_unset`) that embeddings blur; RRF uses ranks only, so the two score scales need no calibration |
 | `rerank` | hybrid top 20, then a cross-encoder (Voyage `rerank-2.5-lite`) rescoring each question and passage together, keeping the top k | the reranker tells a passage that answers the question from one that only shares its topic. Costs one extra request per question |
 
+Optional on top of `rerank`: `RERANK_MAX_PER_SOURCE=n` lets no document fill more than `n` of the `k`
+slots. The reranker then scores all 20 candidates (not just the top `k`) and `cap_per_source` skips hits
+over the cap in favour of the next-best hit from another document. Top chunks cluster in a few
+documents, so a question about two topics can otherwise be answered from only one. It is off by
+default (`0`); with a cap of 2, full_recall@5 went from 16/17 to 17/17 with no change in rank order
+(README, "Per-document cap").
+
 Known limit of the full-text half: Postgres ranks without IDF, so a very common word counts as much
 as a rare one. RRF softens that; a BM25 index (an extension such as ParadeDB's `pg_search`) would
 fix it properly at larger scale.
@@ -79,7 +86,15 @@ fix it properly at larger scale.
 |---|---|---|
 | 1 | Vector search over pgvector, cited answers, abstain token | built |
 | 2 | Hybrid: Postgres full-text + vector, Reciprocal Rank Fusion, cross-encoder rerank | built and measured: rerank helps, hybrid alone does not (see README) |
-| 3 | LangGraph loop: retrieve → grade sufficiency → (rewrite \| decompose \| widen) → retry → answer or abstain | built (LangGraph, `app/rag/agent.py`); real-run results pending |
+| 3 | LangGraph loop: retrieve → grade sufficiency → (rewrite \| decompose \| widen) → retry → answer or abstain | built (LangGraph, `app/rag/agent.py`); run on 3 questions only, so its benefit is unproven (see README) |
+
+### What the API does and does not do
+
+`POST /ask` answers one question per call, including questions with several parts, and says "Not found:"
+for the parts the documents do not cover. Calls are independent: there is no session or history, so a
+follow-up question that depends on the previous turn is not understood. A chat layer (stored turns,
+follow-up rewriting, persona and guardrails) is designed but not built; see the README's "What I would
+do next".
 
 ### The agent loop (Phase 3)
 

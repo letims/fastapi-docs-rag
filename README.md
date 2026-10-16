@@ -27,15 +27,16 @@ Groq for answers), which turned quota handling into part of the design instead o
 
 > Status: Phase 1 is done (queue-based ingestion, baseline vector RAG, eval harness, quota-safe
 > providers). Phase 2 is built and measured: reranking helped, hybrid search did not (see Phase 2
-> results). Phase 3 (the agent loop, LangGraph) is built and tested offline; its eval row is empty
-> until a real run. Numbers below come only from
-> saved runs in `evals/results/`; empty cells mean "not measured yet".
+> results). Phase 3 (the agent loop, LangGraph) is built and was run on three questions, twice;
+> that is too few to say whether it helps, and the full 21-question run is not done. The system answers
+> any number of separate questions but keeps no conversation memory between turns. Numbers below come
+> only from saved runs in `evals/results/`; empty cells mean "not measured yet".
 
 ## Documentation
 
 If you want the big picture first, start with [architecture](docs/architecture.md): it has the system
 diagram, explains how the embedding and chat providers can be swapped independently, and lays out the
-three retrieval phases and the plan for the agent loop. The part I would most like you to read is
+three retrieval phases and how the agent loop works. The part I would most like you to read is
 [ingestion design](docs/ingestion.md), which covers why a Postgres queue is enough at this scale, how
 retries, dead-lettering and idempotency work, and the throughput math behind the 50,000-documents-an-hour
 target (the sequence diagrams for it are further down this page). Because free tiers shape so much of
@@ -204,6 +205,8 @@ LLM-based columns (cited, abstain, tokens, latency) need `make eval-gen`.
 3. **Full corpus, retrieval + generation with Groq (21 questions).** `vector-gen-1791813768.json`, then again after the citation fix (`vector-gen-1791814944.json`).
 4. **Full corpus, hybrid search, retrieval only.** `hybrid-1791820936.json`.
 5. **Full corpus, hybrid candidates + Voyage rerank, retrieval only.** `rerank-1791820713.json`.
+6. **Same, with at most 2 chunks per document (`RERANK_MAX_PER_SOURCE=2`), retrieval only.** `rerank-1791828982.json`.
+7. **Rerank with generation, without and with the cap.** `rerank-gen-1791832103.json` and `rerank-gen-1791833929.json` (the two later `rerank-gen-*` files are cache re-runs of the same settings and give identical numbers).
 
 | Configuration | hit@5 | full_recall@5 | MRR | cited_ok | false_abstain | abstain (unanswerable) | tokens/query | latency |
 |---|---|---|---|---|---|---|---|---|
@@ -213,6 +216,9 @@ LLM-based columns (cited, abstain, tokens, latency) need `make eval-gen`.
 | Vector only, 147 docs + generation (after citation fix) | 1.00 (17/17) | 0.88 (15/17) | 0.97 | 0.88 (15/17) | 0.06 (1/17) | 1.00 (4/4) | ~1,600 | see note |
 | + hybrid (RRF), retrieval | 1.00 (17/17) | 0.88 (15/17) | **0.73** | not run | not run | not run | not run | not run |
 | + rerank (on hybrid candidates), retrieval | 1.00 (17/17) | **0.94 (16/17)** | 0.94 | not run | not run | not run | not run | see note |
+| + rerank with at most 2 chunks per document, retrieval | 1.00 (17/17) | **1.00 (17/17)** | 0.94 | not run | not run | not run | not run | see note |
+| + rerank, generation | 1.00 (17/17) | 0.94 (16/17) | 0.94 | 0.88 (15/17) | 0.06 (1/17) | 1.00 (4/4) | ~1,570 | see note |
+| + rerank with cap of 2, generation | 1.00 (17/17) | **1.00 (17/17)** | 0.94 | 0.88 (15/17) | 0.06 (1/17) | 1.00 (4/4) | ~1,640 | see note |
 | + agent loop (rerank), only q14, q16, q17 | see Phase 3 section | | | | | | ~4,000 | see note |
 
 hit@5, full_recall@5, MRR, cited_ok and false_abstain are over the 17 answerable questions;
@@ -300,6 +306,43 @@ question is noise. Moving from 40 to 147 documents cost one question of full rec
 which is the effect you expect when distractors are added and the reason Phase 2 was built. hit@5 and MRR did not move, so the first right document is still found and
 ranked first; what gets lost is the second document of a multi-part question.
 
+### Per-document cap: fixed q16's retrieval, not its answer
+
+Setting `RERANK_MAX_PER_SOURCE=2` (off by default) makes the reranker score all 20 candidates and
+lets no document fill more than 2 of the 5 slots. Run: `rerank-1791828982.json`, compared row by row
+with `rerank-1791820713.json`.
+
+| | Rerank | Rerank + cap of 2 |
+|---|---|---|
+| hit@5 | 1.00 (17/17) | 1.00 (17/17) |
+| full_recall@5 | 0.94 (16/17) | **1.00 (17/17)** |
+| MRR | 0.94 | 0.94 |
+
+- **q16 now retrieves `background-tasks.md`.** That is the whole gain: one question.
+- **No rank changed for any question** (MRR is identical), and no expected source was lost. The
+  only differences are in the tail: where a document had held 3 or more slots, the freed slots now go
+  to the next-best other documents. Eleven questions differ this way (q16 is the fix; for example q01 went from 1 to 3
+  distinct documents in the top 5).
+- **What this does not show.** One question moved, and I picked the cap of 2 from the q16 failure
+  before running anything, so this is a result on the question that motivated the change and not
+  independent evidence. The tail chunks are extra material for the answer step: they could add
+  useful context or noise, and generation has not been run with them. Unanswerable questions
+  now see slightly different passages too (q19's fifth source changed), so abstention has to be
+  rechecked.
+
+**End to end (21 questions, with generation).** Without and with the cap the answer-level metrics are
+identical: `cited_ok` 0.88 (15/17), `false_abstain` 0.06 (1/17), abstention on the unanswerable
+questions 4/4. Tokens per question rose about 4% (roughly 1,570 to 1,640). The two failures are the
+same in both runs:
+
+- **q16:** with the cap, `background-tasks.md` is in the context (full recall true), but the answer
+  still cites only the `yield` documents. Retrieval was fixed; the model did not use the extra
+  document. The answer step is now the limit for this question, not search.
+- **q17:** still a false abstain in both runs (the partial question that flips between runs).
+
+So the cap is a retrieval improvement (one question, 16/17 to 17/17 full recall) that costs a little
+and does not hurt answers or abstention, and it does not change the answer-level scores.
+
 ### Phase 3 first results: the loop works, but three questions cannot prove it helps
 
 Run: `agent-rerank-gen-1791822263.json`, the rerank retriever plus the agent loop, on the three
@@ -332,47 +375,137 @@ Average 4,001 tokens per question against about 1,600 for Phase 1, and 1.67 roun
 - **Not shown:** whether the loop hurts questions that were already fine. That needs the full
   21-question run.
 
-**Changes made after this run (not yet measured):** (1) the loop now stops when a follow-up round
-brings no document that no earlier round had returned; on q17 this would have ended it after round 2.
-(2) The grader must list the parts of the question and the passage covering each, and the parser
-overrides `sufficient` when a part has none (a passage only counts if it is about the part). Both
-come from one run of three questions, so treat them as hypotheses until `make eval-agent` is re-run.
+#### Second run, after two changes to the loop
+
+Run: `agent-rerank-gen-1791825324.json`. Changes: (1) a follow-up round must bring a document no
+earlier round returned, otherwise the loop stops; (2) the grader must list the parts of the question
+and the passage covering each, and the parser overrides "sufficient" when a part has none.
+
+| Question | First run | Second run | Rounds (first, second) | Tokens (first, second) |
+|---|---|---|---|---|
+| q14 | both documents, cited | same answer (cached) | 1, 1 | 2,642 / 2,853 |
+| q16 | missed `background-tasks.md` | same answer (cached), still missed | 1, 1 | 4,348 / 4,571 |
+| q17 | partial answer with "Not found:", cited | **`INSUFFICIENT_CONTEXT` (false abstain)** | 3, 2 | 5,014 / 3,113 |
+
+Tokens per question fell from 4,001 to 3,512 and the average from 1.67 to 1.33 rounds, but
+`cited_ok` fell from 0.67 to 0.33 and `false_abstain` rose from 0 to 0.33. On these three questions
+the changes bought nothing in quality.
+
+- **Change 1 did what it was designed to do on cost.** q17 stopped after round 2 because the
+  follow-up query returned one new chunk from a document already in hand (`new_sources: 0`), saving
+  a round and about 1,900 tokens.
+- **q17 is unstable, so its earlier improvement was not a result.** Both runs had
+  `background-tasks.md`, the document with the Celery paragraph, in the context from round 1. The
+  first run (8 passages) answered with "Not found:" for the setup steps; this one (6 passages, a
+  different order) refused. The Phase 1 baseline (5 passages) also refused. Whether that is
+  prompt sensitivity or sampling noise I cannot tell from three samples, but it means the loop is
+  not what decides q17: the generation step is. I should not have credited the loop for it.
+- **Change 2 had no effect on q16, and the trace now shows why (re-run from cache, no tokens
+  spent).** The grader followed the format and split the question into its two *clauses*: "can a
+  dependency with yield be used together with background tasks" (passage 1) and "when does its exit
+  code run" (passage 2). Both passages are about `yield` dependencies, so every part had a passage and
+  nothing was overridden. It treated "yield" and "background tasks" as one topic. So the failure is
+  one of judgement about what the question needs, not of format, and more prompt wording would be
+  tuning to this one question.
+- **q14 and q16 answers were served from the cache** (same retrieval, same passages), so the
+  second run only really exercised q17, and the grader on all three.
 
 ### Known failure modes
 
-- **Multi-hop questions get only half the evidence (q14 and q16, the two full-recall misses).**
-  q16 needs `dependencies-with-yield.md` and `background-tasks.md`; the top chunks came from
-  `advanced-dependencies.md` and `dependencies-with-yield.md`, so `background-tasks.md` never
-  reached the model. q14 needs `testing-dependencies.md` and `testing.md`; on the full corpus
-  `advanced/settings.md` took the second slot, and q14 was the question that regressed from the
-  40-doc run (reranking fixes it, see Phase 2 results; q16 remains). One query vector favors the dominant half of a two-part question, and top-k chunks
-  cluster in a few documents. Expected fix: the agent loop's *decompose* step (retrieve each
-  sub-question separately), possibly diversity-aware ranking. Not tried yet.
-- **Unanswerable questions are refused correctly (q18 to q21, 4/4).** Retrieval still returns
-  something for every query (often `index.md`, `features.md`), so the refusal comes entirely from
-  the LLM saying `INSUFFICIENT_CONTEXT`. With four questions this says the prompt works, not that
-  abstention is solved; a sufficiency grader is still planned.
-- **One false abstain (q17).** "Set up Celery workers with FastAPI" is a partial question: the docs
-  mention Celery only in passing. The model refused outright instead of answering what the docs do
-  say. Whether that is right or wrong depends on the policy we want; today the metric counts it
-  against the system.
-- **Citation misses were mostly a format problem, now fixed (q07, q10).** q07 gave a correct
-  answer but cited with `【5】` instead of `[5]`, and q10 declined to use the retrieved text and
-  cited nothing. A lenient citation parser (accepts `【5】`, `[2, 5]`) and a tighter prompt (plain
-  `[n]`, a citation required on partial answers, "read the code examples", "Not found" only for
-  what is truly absent) lifted `cited_ok` from 0.76 to 0.88 with retrieval unchanged. What remains
-  is q16 (it cites only the one of its two documents that was retrieved, a retrieval problem) and
-  q17 (the false abstain above). q14's answer now says "Not found: how to create the test client",
-  which is the honest way for a missing second document to show up.
+Status as of the last saved runs. "Measured" means a file in `evals/results/` backs it.
 
-_More to be added from real runs of hybrid search, reranking and the agent loop._
+- **Multi-hop questions get only half the evidence (q16; q14 until reranking).**
+  q16 needs `dependencies-with-yield.md` and `background-tasks.md`. Vector, hybrid and rerank all
+  return chunks from `advanced-dependencies.md` and `dependencies-with-yield.md` and not the second
+  document, even though `background-tasks.md` is among the 20 hybrid candidates (checked offline).
+  Reasons: one query vector favors the dominant half of a two-part question, and top-k chunks
+  cluster in a few documents. q14 (`testing-dependencies.md` plus `testing.md`) was fixed by
+  reranking (measured). q16 was **not** fixed by the agent loop (measured, one run): the grader
+  called the evidence sufficient, so decompose never ran. A cap of 2 chunks per document fixed it at
+  the retrieval stage (retrieval only; see the per-document cap section).
+- **The grader can be fooled by a passing mention (q16, measured).** The passages it saw talk about
+  background tasks in the context of `yield`, so it judged that part covered. An LLM judging
+  sufficiency from passages cannot know which document is the authority on a topic. The part-by-part
+  check added after the first run did not change the verdict on q16: the grader split the question
+  into two clauses, both answered by `yield` passages, and never treated "background tasks" as a
+  topic that needs its own document.
+- **Partial questions flip between runs (q17, measured three times).** "Set up Celery workers with
+  FastAPI" is only touched on in the docs. Plain generation refused (false abstain). Rerank plus the
+  loop answered with "Not found:" for the setup steps in one run and refused in the next, with the
+  same relevant document in the context both times. So this is generation behaviour on a partial
+  question, not something the loop controls. The loop's real cost here is separate: it cannot tell
+  "the docs do not have this" from "I have not found it yet", and asked for rewordings of one query
+  (3 rounds, about 5,000 tokens) until the new-document stop rule cut it to 2 rounds.
+- **Unanswerable questions are refused correctly without the loop (q18 to q21, 4/4).** Retrieval
+  returns something for every query (often `index.md`, `features.md`), so the refusal comes from
+  the LLM saying `INSUFFICIENT_CONTEXT`. With four questions this says the prompt works, not that
+  abstention is solved. **Not measured with the loop**: the agent run covered only q14, q16 and
+  q17, so whether the loop keeps refusing, or burns rounds looking for something that is not there,
+  is unknown.
+- **Citation misses were mostly a format problem, fixed (q07, q10).** A lenient citation parser
+  (accepts `【5】`, `[2, 5]`) and a tighter prompt lifted `cited_ok` from 0.76 to 0.88 with retrieval
+  unchanged. What remains is q16 (it cites only the one of its two documents that was retrieved).
 
 ## Limits and what I would do next
 
+### What the numbers can and cannot support
+
+- **The eval is small.** 21 questions, 17 answerable: one question moves a rate by 0.06. Reranking's
+  gain is one question (q14); the agent loop has been run on three. None of this is statistically
+  significant, and the agent changes were designed after looking at those same three questions, so a
+  good result on them proves little. A held-out set is needed before tuning further.
+- **No control for the loop.** The agent run used rerank plus a larger context (up to 9 passages).
+  There is no rerank-plus-generation run without the loop, so "the loop helped" and "more context
+  helped" cannot be told apart.
+- **The grader has been tested on one model.** OpenAI gpt-oss-20b on Groq. All four grader replies in
+  the first run parsed as JSON, but four is not a reliability measure. The fail-open path (answer with
+  what was found) exists for when it does not.
+- **Cost and latency are inflated by the free tier.** The loop used about 4,000 tokens per question
+  against about 1,600 without it. The 60 to 183 s per question is mostly the rate limiter waiting,
+  so it says little about real latency. Groq's daily cap of about 200K tokens is not modelled by the
+  quota governor; a full 21-question agent run is estimated at 85K or more.
+- **Not verified against real services:** Voyage rerank rate limits (assumed 3 requests per minute),
+  and the Gemini adapter (tested against mocked responses only).
 - Free-tier APIs: rate limits apply, and providers may use free-tier data to improve their products
   (public docs only here).
-- Ingest throughput on the free tier is limited by the embedding quota (3 requests per minute), not by the pipeline. `make load-test` measures the pipeline alone: about 70 docs/s per process with a fake embedder (details in [Ingestion](docs/ingestion.md#pipeline-throughput-load-test)). That excludes real network behavior and a 395k-chunk table, which are not measured.
-- Chunks under 200 chars are 12% of the corpus; merging tiny sections into neighbors may help.
-- Contextual retrieval (LLM-written context prepended to each chunk) is a likely next gain.
-- Production: tracing (Langfuse/LangSmith), drift monitoring on the eval set in CI, per-query
-  cost budgets, and a real queue.
+- Ingest throughput on the free tier is limited by the embedding quota (3 requests per minute), not
+  by the pipeline. `make load-test` measures the pipeline alone: about 70 docs/s per process with a
+  fake embedder (details in [Ingestion](docs/ingestion.md#pipeline-throughput-load-test)). That
+  excludes real network behavior and a 395k-chunk table, which are not measured.
+
+### What I would do next, in order
+
+1. **Make the answer step use the evidence it is given (q16).** The cap put `background-tasks.md` in
+   the context and the model still cited only the `yield` documents. Passages already carry their
+   source and heading, so the likely fix is a prompt instruction to answer each part of a multi-part
+   question from the passages that cover it. A prompt change to measure on the same 21 questions;
+   the agent loop is not needed for this case any more.
+2. **Run the full agent evaluation.** The no-loop control now exists (`rerank-gen-*` above). Run
+   `RERANK_MAX_PER_SOURCE=2 make eval-agent MODE=rerank` on all 21 questions, after the daily quota resets. Report the loop's
+   effect on the questions that already passed too: the real risk is that it costs tokens and
+   sometimes makes a good answer worse.
+3. **Make it a conversation.** Today every `/ask` call is independent: it answers any question, and
+   several parts in one message, but a follow-up such as "and how do I test it?" has no context. The
+   design: store turns per session in Postgres, rewrite each follow-up into a standalone question
+   before retrieval (one extra LLM call, skipped on the first turn), pass a window of recent turns to
+   the answer step, and add a persona, style and guardrail block to the system prompt (scope to the
+   docs, treat passage text as data, no personal data). It needs its own multi-turn eval (pronoun
+   follow-ups, topic switches, unanswerable follow-ups) and a re-run of the 21 questions, because the
+   prompt change can regress them. Not built, not measured.
+4. **Grow the eval set before tuning anything else.** Roughly 40 questions with more multi-hop and
+   more unanswerable ones, written before looking at results, with part of them held out. Without
+   this, every later improvement is a guess about three questions.
+5. **If the cap hurts answers or abstention,** the other LLM-free option is to always decompose
+   questions that contain two clauses (a cheap planner call, or a rule on "and"), at the cost of
+   more tokens on every multi-part question. The grader-prompt route is closed for now: it followed
+   its instructions and still judged the evidence sufficient.
+6. **Make the loop cheaper and faster.** Run sub-queries concurrently (they run one after another
+   today), and use plain hybrid for follow-up rounds, reserving the reranker for the first one. Both
+   change how it behaves, so each needs its own measurement.
+7. **Unfinished housekeeping from earlier phases:** batch several documents per embedding request
+   (up to about 3x more throughput on the free tier, needs a higher `EMBED_TPM`), make Voyage and Groq
+   the built-in provider defaults, and confirm the real Voyage rerank limits.
+8. Chunks under 200 chars are 12% of the corpus; merging tiny sections into neighbors may help.
+   Contextual retrieval (LLM-written context prepended to each chunk) is a likely further gain.
+9. **Production:** tracing (Langfuse or LangSmith; LangSmith is installed but off), drift monitoring
+   on the eval set in CI, per-query cost budgets, and a real queue.

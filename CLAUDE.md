@@ -6,7 +6,7 @@ that proves each step helped.
 
 ## Stack
 FastAPI (async) · Postgres 16 + pgvector (vectors, full-text, and the job queue) · psycopg 3 ·
-Voyage (embeddings) + Groq (chat) free tiers, Gemini optional, all behind provider interfaces · LangGraph (Phase 3) · uv · pytest · ruff.
+Voyage (embeddings) + Groq (chat) free tiers, Gemini optional, all behind provider interfaces · LangGraph (agent loop) · uv · pytest · ruff.
 
 ## Commands
 - `make up` / `make down`: Postgres via docker compose (host port 5433)
@@ -50,7 +50,15 @@ Voyage (embeddings) + Groq (chat) free tiers, Gemini optional, all behind provid
 README is deliberately short (context, setup, how to read the results). Detail lives in `docs/`:
 architecture, ingestion, quotas, commands, evaluation, testing. Put new detail there, not in the README.
 
+## Retrieval and agent notes
+- `search(mode, ...)` in `app/rag/retrieve.py` is the one retrieval entry point (vector | hybrid | rerank).
+  `RERANK_MAX_PER_SOURCE` (default 0 = off) caps chunks per document after reranking.
+- The agent loop (`app/rag/agent.py`) must stay bounded: max rounds, token budget, no-progress rule.
+  A grader reply it cannot parse fails open (answer with what was found), never crashes or retries forever.
+- The API is stateless (no conversation memory). Do not describe it as a multi-turn chatbot.
+
 ## Roadmap (see README for status)
-1. Baseline vector RAG + eval  2. Hybrid (tsvector + pgvector) + RRF + reranker
-3. LangGraph loop: grade → rewrite/decompose → retrieve → generate, caps, abstain
-4. Tracing + cost/latency per query  5. Throughput measurement + write-up
+1. Baseline vector RAG + eval (done)  2. Hybrid + RRF + reranker (done, measured)
+3. LangGraph loop: grade → rewrite/decompose → retrieve → generate, caps, abstain (built; 3-question runs only)
+4. Tracing + cost/latency per query (not built)  5. Throughput measurement (pipeline measured with `make load-test`)
+6. Chat layer: sessions, follow-up rewriting, persona and guardrails (designed, not built)

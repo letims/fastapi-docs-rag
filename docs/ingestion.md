@@ -11,10 +11,14 @@ leaves half a document. Re-running the corpus is cheap and safe.
 **Queue in Postgres.** `SELECT … FOR UPDATE SKIP LOCKED` gives safe concurrent claiming with one
 less service to run, and jobs are transactional with the data they produce. Failures retry with
 exponential backoff and full jitter (`run_after`), then dead-letter after `JOB_MAX_ATTEMPTS`.
-A job whose lock outlives the visibility timeout is reclaimed (crashed worker). A partial unique
+A job whose lock outlives the visibility timeout is reclaimed (crashed worker). A live worker renews its lock in the background (`queue.heartbeat`, every third of the timeout), so a job that is only waiting on a rate limit is not mistaken for a dead one. A partial unique
 index allows one live job per source, so double-enqueueing is a no-op.
 *When I would change it:* above a few hundred jobs/s or with cross-service fan-out, SQS / Cloud
 Tasks / Redis streams; the claim/ack/fail interface in `app/ingest/queue.py` is the seam.
+
+**Not built:** removing documents. Re-submitting a changed document replaces its chunks, but a source file
+that disappears from the corpus leaves its document and chunks in the database. Deleting them needs a
+sweep that compares stored sources with the current list.
 
 **The queue is not the bottleneck; embedding is.** Measured on this corpus (147 docs after
 excluding changelog/people pages):
