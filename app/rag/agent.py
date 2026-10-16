@@ -90,10 +90,15 @@ class AgentResult:
 
 
 def parse_verdict(text: str) -> dict | None:
-    """Parse the grader's reply into `{"sufficient", "missing", "rewrite"}`, or None if unusable.
+    """Parse the grader's JSON reply into a verdict dict, or None if it is unusable.
+
+    The verdict has `parts` (each distinct thing the question asks, with the passage number that
+    covers it or None), `sufficient`, `missing` (self-contained sub-queries) and `rewrite`.
+    `overridden` is True when the model said sufficient but one of its own parts has no passage:
+    the parser then flips `sufficient` to False and turns those parts into `missing` queries.
 
     Tolerates prose or code fences around the JSON (models add them even when told not to). Only
-    the first `{` to the last `}` is read.
+    the first `{` to the last `}` is read. A reply without a boolean `sufficient` is unusable.
     """
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
@@ -114,18 +119,22 @@ def parse_verdict(text: str) -> dict | None:
     sufficient = raw["sufficient"]
     # Guard: the model must not call the evidence sufficient while its own part-by-part check
     # found a part with no passage. Those parts become the queries to search.
-    parts = raw.get("parts")
-    uncovered = [
-        p["part"].strip()[:MAX_QUERY_CHARS]
-        for p in (parts if isinstance(parts, list) else [])
-        if isinstance(p, dict)
-        and isinstance(p.get("part"), str)
-        and p["part"].strip()
-        and not isinstance(p.get("passage"), int | float)
+    raw_parts = raw.get("parts")
+    parts = [
+        {
+            "part": p["part"].strip()[:MAX_QUERY_CHARS],
+            "passage": p["passage"] if isinstance(p.get("passage"), int | float) else None,
+        }
+        for p in (raw_parts if isinstance(raw_parts, list) else [])
+        if isinstance(p, dict) and isinstance(p.get("part"), str) and p["part"].strip()
     ]
-    if sufficient and uncovered:
+    uncovered = [p["part"] for p in parts if p["passage"] is None]
+    overridden = bool(sufficient and uncovered)
+    if overridden:
         sufficient, queries = False, queries + uncovered
     return {
+        "parts": parts,
+        "overridden": overridden,
         "sufficient": sufficient,
         "missing": list(dict.fromkeys(queries))[:MAX_SUBQUERIES],
         "rewrite": rewrite.strip()[:MAX_QUERY_CHARS] if isinstance(rewrite, str) else "",
@@ -227,6 +236,11 @@ async def run_agent(
     t0 = time.perf_counter()
 
     async def retrieve_node(state: AgentState) -> dict:
+        """Run every pending query through the configured retriever and record what was new.
+
+        Round 1 retrieves `k` passages for the question; later rounds keep `per_query` per follow-up
+        query (double after a "widen" plan). `new_chunks` / `new_sources` feed the no-progress rule.
+        """
         rounds = state.get("rounds", 0) + 1
         queries = state["queries"]
         runs, tried, before = [], [], {h.chunk_id for r in state.get("runs", []) for h in r["hits"]}
@@ -257,6 +271,7 @@ async def run_agent(
         }
 
     def route_after_retrieve(state: AgentState) -> str:
+        """Hard stops come first (max rounds, no new document, token budget); otherwise grade."""
         if state["rounds"] >= max_rounds:
             return "stop_max_rounds"
         # Follow-up rounds must bring a document not seen before: more chunks from documents
@@ -268,6 +283,10 @@ async def run_agent(
         return "grade"
 
     async def grade_node(state: AgentState) -> dict:
+        """Ask the LLM whether the evidence covers every part of the question (one JSON verdict).
+
+        An unusable reply fails open: stop with `grader_error` and answer with what was found.
+        """
         evidence = select_context(state["runs"], k + extra_context)
         res = await llm.generate(
             build_grader_prompt(state["question"], evidence), system=GRADER_SYSTEM
@@ -287,6 +306,8 @@ async def run_agent(
                 {
                     "step": "grade",
                     "sufficient": verdict["sufficient"],
+                    "parts": verdict["parts"],  # what the grader said covers each part
+                    "overridden": verdict["overridden"],  # parser turned "sufficient" into "no"
                     "missing": verdict["missing"],
                     "rewrite": verdict["rewrite"],
                 }
@@ -296,9 +317,11 @@ async def run_agent(
         return update
 
     def route_after_grade(state: AgentState) -> str:
+        """Plan another round only when the grader said the evidence is not enough."""
         return "plan" if state.get("verdict") and not state["verdict"]["sufficient"] else "answer"
 
     async def plan_node(state: AgentState) -> dict:
+        """Turn the grader's verdict into the next queries (decompose, rewrite or widen), or stop."""
         action, queries = plan_next(
             state["verdict"], state.get("tried", []), state["question"], state.get("widened", False)
         )
@@ -313,9 +336,12 @@ async def run_agent(
         return update
 
     def route_after_plan(state: AgentState) -> str:
+        """Retrieve again if the plan produced queries; otherwise go straight to the answer."""
         return "retrieve" if state["queries"] else "answer"
 
     def stopper(reason: str):
+        """Build a node that records why the loop stopped, then lets the graph continue to the answer."""
+
         async def node(state: AgentState) -> dict:
             return {
                 "stop_reason": reason,
@@ -325,6 +351,7 @@ async def run_agent(
         return node
 
     async def answer_node(state: AgentState) -> dict:
+        """Write the final answer from the best passages found across all rounds (same step as Phase 1)."""
         ctx = select_context(state["runs"], k + extra_context)
         ans = await generate_answer(llm, state["question"], ctx)
         return {

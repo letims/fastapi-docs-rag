@@ -59,12 +59,18 @@ def V(missing=(), rewrite=""):
 
 
 def test_parse_verdict_plain_and_fenced():
-    assert parse_verdict(V_OK) == {"sufficient": True, "missing": [], "rewrite": ""}
+    assert parse_verdict(V_OK) == {
+        "parts": [],
+        "overridden": False,
+        "sufficient": True,
+        "missing": [],
+        "rewrite": "",
+    }
     v = parse_verdict(
         'Sure!\n```json\n{"sufficient": false, "missing": ["a", "a", " b ", 3, ""],'
         ' "rewrite": " r "}\n```'
     )
-    assert v == {"sufficient": False, "missing": ["a", "b"], "rewrite": "r"}
+    assert (v["sufficient"], v["missing"], v["rewrite"]) == (False, ["a", "b"], "r")
 
 
 @pytest.mark.parametrize(
@@ -220,8 +226,10 @@ def test_parse_verdict_overrides_sufficient_when_a_part_has_no_passage():
         }
     )
     v = parse_verdict(text)
-    assert v["sufficient"] is False
+    assert v["sufficient"] is False and v["overridden"] is True
     assert v["missing"] == ["background tasks usage", "exit code timing"]
+    assert v["parts"][0] == {"part": "yield dependencies", "passage": 1}
+    assert v["parts"][1] == {"part": "background tasks usage", "passage": None}
 
 
 def test_parse_verdict_keeps_sufficient_when_every_part_is_covered():
@@ -230,7 +238,9 @@ def test_parse_verdict_keeps_sufficient_when_every_part_is_covered():
     text = json.dumps(
         {"parts": [{"part": "a", "passage": 1}, {"part": "b", "passage": 2.0}], "sufficient": True}
     )
-    assert parse_verdict(text)["sufficient"] is True
+    v = parse_verdict(text)
+    assert v["sufficient"] is True and v["overridden"] is False
+    assert v["parts"][1]["passage"] == 2.0
     assert parse_verdict('{"sufficient": true, "parts": "none"}')["sufficient"] is True
 
 
@@ -244,3 +254,6 @@ async def test_grader_override_triggers_a_decompose_round(monkeypatch):
     llm = ScriptedLLM([liar, V_OK])
     _, res = await go(monkeypatch, table, llm)
     assert res.rounds == 2 and res.queries == ["Q?", "bg tasks"] and res.stop_reason == "sufficient"
+    first_grade = res.trace[1]
+    assert first_grade["overridden"] is True
+    assert first_grade["parts"] == [{"part": "bg tasks", "passage": None}]
