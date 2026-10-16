@@ -1,0 +1,229 @@
+{
+  "summary": {
+    "mode": "rerank",
+    "agent": true,
+    "k": 5,
+    "n_answerable": 3,
+    "hit@k": 1.0,
+    "full_recall@k": 0.667,
+    "mrr": 0.833,
+    "cited_ok": 0.333,
+    "false_abstain": 0.333,
+    "abstain_rate_unanswerable": 0.0,
+    "input_tokens": 6917,
+    "output_tokens": 3620,
+    "avg_latency_s": 20.32,
+    "llm_api_requests": 1,
+    "avg_rounds": 1.33,
+    "tokens_per_query": 3512,
+    "stop_reasons": {
+      "sufficient": 2,
+      "no_progress": 1
+    },
+    "note": "hit/recall are over the agent's final context (k + extra), not the top k"
+  },
+  "rows": [
+    {
+      "id": "q14",
+      "type": "multi",
+      "question": "How do I override a dependency during tests, and how do I create the test client?",
+      "expected_sources": [
+        "advanced/testing-dependencies.md",
+        "tutorial/testing.md"
+      ],
+      "retrieved": [
+        "advanced/testing-dependencies.md",
+        "advanced/settings.md",
+        "tutorial/testing.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 0.889,
+      "answer": "To override a dependency in a test you use the FastAPI application\u2019s `dependency_overrides` dictionary.  \nPut the original dependency function as the key and the replacement function as the value; FastAPI will call the override instead of the original during the test. After the test you can clear the overrides by assigning an empty dict to `app.dependency_overrides` (or by resetting only the ones you added) [1].  \nExample:  \n\n```python\ndef mock_get_settings():\n    return Settings(admin_email=\"test@example.com\")\n\napp.dependency_overrides[get_settings] = mock_get_settings\n# run your test \u2026\napp.dependency_overrides = {}   # reset after the test\n```\n\nTo create a test client you install `httpx`, import `TestClient` from `fastapi.testclient` (or `starlette.testclient`), and instantiate it with your FastAPI app. The client can then be used in normal (non\u2011async) test functions to send requests and assert responses [5].  \n\n```python\nfrom fastapi.testclient import TestClient\n\nclient = TestClient(app)\n\ndef test_read_root():\n    response = client.get(\"/\")\n    assert response.status_code == 200\n```",
+      "abstained": false,
+      "cited_ok": true,
+      "cached": true,
+      "input_tokens": 2229,
+      "output_tokens": 624,
+      "latency_s": 0.89,
+      "rounds": 1,
+      "stop_reason": "sufficient",
+      "queries": [
+        "How do I override a dependency during tests, and how do I create the test client?"
+      ],
+      "trace": [
+        {
+          "step": "retrieve",
+          "round": 1,
+          "queries": [
+            "How do I override a dependency during tests, and how do I create the test client?"
+          ],
+          "new_chunks": 5,
+          "new_sources": 3,
+          "sources": [
+            "advanced/testing-dependencies.md",
+            "advanced/settings.md",
+            "tutorial/testing.md"
+          ]
+        },
+        {
+          "step": "grade",
+          "sufficient": true,
+          "missing": [],
+          "rewrite": ""
+        },
+        {
+          "step": "answer",
+          "passages": 5,
+          "abstained": false,
+          "cited": [
+            "advanced/testing-dependencies.md",
+            "tutorial/testing.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q16",
+      "type": "multi",
+      "question": "Can a dependency with yield be used together with background tasks, and when does its exit code run?",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "advanced/advanced-dependencies.md",
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "hit": true,
+      "full_recall": false,
+      "rank": 2,
+      "retrieval_s": 0.976,
+      "answer": "Yes \u2013 a dependency that uses `yield` can be combined with a background task.  \nThe exit code of that dependency is executed **after the path\u2011operation function returns** and, by default, **after the response has been sent to the client**. This was the behaviour up to FastAPI\u202f0.106.0, which allowed the same objects yielded by the dependency to be used inside the background task because the dependency was still alive until the background task finished [1].  \n\nStarting with FastAPI\u202f0.106.0 the framework was changed so that the exit code runs **before** the response is sent, so that resources are released earlier and not held while the response travels over the network. If you need the old behaviour, you must create the resources inside the background task itself and avoid relying on the dependency\u2019s objects after the path\u2011operation returns [1].",
+      "abstained": false,
+      "cited_ok": false,
+      "cached": true,
+      "input_tokens": 2910,
+      "output_tokens": 1661,
+      "latency_s": 0.98,
+      "rounds": 1,
+      "stop_reason": "sufficient",
+      "queries": [
+        "Can a dependency with yield be used together with background tasks, and when does its exit code run?"
+      ],
+      "trace": [
+        {
+          "step": "retrieve",
+          "round": 1,
+          "queries": [
+            "Can a dependency with yield be used together with background tasks, and when does its exit code run?"
+          ],
+          "new_chunks": 5,
+          "new_sources": 2,
+          "sources": [
+            "advanced/advanced-dependencies.md",
+            "tutorial/dependencies/dependencies-with-yield.md"
+          ]
+        },
+        {
+          "step": "grade",
+          "sufficient": true,
+          "missing": [],
+          "rewrite": ""
+        },
+        {
+          "step": "answer",
+          "passages": 5,
+          "abstained": false,
+          "cited": [
+            "advanced/advanced-dependencies.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q17",
+      "type": "partial",
+      "question": "How do I set up Celery workers with FastAPI for heavy background computation?",
+      "expected_sources": [
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "tutorial/background-tasks.md",
+        "reference/background.md",
+        "deployment/server-workers.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1,
+      "retrieval_s": 59.083,
+      "answer": "INSUFFICIENT_CONTEXT. The passages do not provide details on how to set up Celery workers with FastAPI.",
+      "abstained": true,
+      "cited_ok": false,
+      "cached": false,
+      "input_tokens": 1778,
+      "output_tokens": 1335,
+      "latency_s": 59.08,
+      "rounds": 2,
+      "stop_reason": "no_progress",
+      "queries": [
+        "How do I set up Celery workers with FastAPI for heavy background computation?",
+        "Celery FastAPI integration heavy background tasks"
+      ],
+      "trace": [
+        {
+          "step": "retrieve",
+          "round": 1,
+          "queries": [
+            "How do I set up Celery workers with FastAPI for heavy background computation?"
+          ],
+          "new_chunks": 5,
+          "new_sources": 3,
+          "sources": [
+            "tutorial/background-tasks.md",
+            "reference/background.md",
+            "deployment/server-workers.md"
+          ]
+        },
+        {
+          "step": "grade",
+          "sufficient": false,
+          "missing": [
+            "Celery FastAPI integration heavy background tasks"
+          ],
+          "rewrite": "Celery FastAPI integration heavy background tasks"
+        },
+        {
+          "step": "plan",
+          "action": "decompose",
+          "queries": [
+            "Celery FastAPI integration heavy background tasks"
+          ]
+        },
+        {
+          "step": "retrieve",
+          "round": 2,
+          "queries": [
+            "Celery FastAPI integration heavy background tasks"
+          ],
+          "new_chunks": 1,
+          "new_sources": 0,
+          "sources": [
+            "tutorial/background-tasks.md"
+          ]
+        },
+        {
+          "step": "stop",
+          "reason": "no_progress"
+        },
+        {
+          "step": "answer",
+          "passages": 6,
+          "abstained": true,
+          "cited": []
+        }
+      ]
+    }
+  ]
+}

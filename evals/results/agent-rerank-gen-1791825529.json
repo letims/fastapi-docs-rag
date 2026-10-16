@@ -1,0 +1,95 @@
+{
+  "summary": {
+    "mode": "rerank",
+    "agent": true,
+    "k": 5,
+    "n_answerable": 1,
+    "hit@k": 1.0,
+    "full_recall@k": 0.0,
+    "mrr": 0.5,
+    "cited_ok": 0.0,
+    "false_abstain": 0.0,
+    "abstain_rate_unanswerable": 0.0,
+    "input_tokens": 2910,
+    "output_tokens": 1661,
+    "avg_latency_s": 0.13,
+    "llm_api_requests": 0,
+    "avg_rounds": 1.0,
+    "tokens_per_query": 4571,
+    "stop_reasons": {
+      "sufficient": 1
+    },
+    "note": "hit/recall are over the agent's final context (k + extra), not the top k"
+  },
+  "rows": [
+    {
+      "id": "q16",
+      "type": "multi",
+      "question": "Can a dependency with yield be used together with background tasks, and when does its exit code run?",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "advanced/advanced-dependencies.md",
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "hit": true,
+      "full_recall": false,
+      "rank": 2,
+      "retrieval_s": 0.127,
+      "answer": "Yes \u2013 a dependency that uses `yield` can be combined with a background task.  \nThe exit code of that dependency is executed **after the path\u2011operation function returns** and, by default, **after the response has been sent to the client**. This was the behaviour up to FastAPI\u202f0.106.0, which allowed the same objects yielded by the dependency to be used inside the background task because the dependency was still alive until the background task finished [1].  \n\nStarting with FastAPI\u202f0.106.0 the framework was changed so that the exit code runs **before** the response is sent, so that resources are released earlier and not held while the response travels over the network. If you need the old behaviour, you must create the resources inside the background task itself and avoid relying on the dependency\u2019s objects after the path\u2011operation returns [1].",
+      "abstained": false,
+      "cited_ok": false,
+      "cached": true,
+      "input_tokens": 2910,
+      "output_tokens": 1661,
+      "latency_s": 0.13,
+      "rounds": 1,
+      "stop_reason": "sufficient",
+      "queries": [
+        "Can a dependency with yield be used together with background tasks, and when does its exit code run?"
+      ],
+      "trace": [
+        {
+          "step": "retrieve",
+          "round": 1,
+          "queries": [
+            "Can a dependency with yield be used together with background tasks, and when does its exit code run?"
+          ],
+          "new_chunks": 5,
+          "new_sources": 2,
+          "sources": [
+            "advanced/advanced-dependencies.md",
+            "tutorial/dependencies/dependencies-with-yield.md"
+          ]
+        },
+        {
+          "step": "grade",
+          "sufficient": true,
+          "parts": [
+            {
+              "part": "Can a dependency with yield be used together with background tasks?",
+              "passage": 1
+            },
+            {
+              "part": "When does its exit code run?",
+              "passage": 2
+            }
+          ],
+          "overridden": false,
+          "missing": [],
+          "rewrite": ""
+        },
+        {
+          "step": "answer",
+          "passages": 5,
+          "abstained": false,
+          "cited": [
+            "advanced/advanced-dependencies.md"
+          ]
+        }
+      ]
+    }
+  ]
+}
