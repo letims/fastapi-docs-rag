@@ -1,8 +1,12 @@
+"""Retrieval: vector search, keyword search, Reciprocal Rank Fusion, reranking and the per-document
+cap. `search(mode, ...)` is the single entry point used by the API, the agent and the evals."""
+
 import re
 from dataclasses import dataclass, replace
 
 from psycopg_pool import AsyncConnectionPool
 
+from app.config import get_settings
 from app.db import vec_literal
 from app.providers.base import Embedder, Reranker
 
@@ -148,6 +152,30 @@ async def hybrid_search(
     return rrf_fuse([vec, kw])[:k]
 
 
+def cap_per_source(ranked: list[Hit], k: int, cap: int) -> list[Hit]:
+    """Take the best `k` hits while letting no document fill more than `cap` of the slots.
+
+    Top-k chunks cluster in a few documents, so a question about two topics can be answered from
+    only the dominant one. Hits over the cap are skipped in favour of the next-best hit from another
+    document; if that leaves fewer than `k`, the skipped hits fill the remaining slots in order.
+    `cap <= 0` turns the rule off.
+    """
+    if cap <= 0:
+        return ranked[:k]
+    kept: list[Hit] = []
+    skipped: list[Hit] = []
+    per_source: dict[str, int] = {}
+    for h in ranked:
+        if len(kept) == k:
+            break
+        if per_source.get(h.source, 0) < cap:
+            per_source[h.source] = per_source.get(h.source, 0) + 1
+            kept.append(h)
+        else:
+            skipped.append(h)
+    return kept + skipped[: k - len(kept)]
+
+
 async def rerank_search(
     pool: AsyncConnectionPool,
     embedder: Embedder,
@@ -155,6 +183,7 @@ async def rerank_search(
     question: str,
     k: int = 5,
     candidates: int = 20,
+    max_per_source: int | None = None,
 ) -> list[Hit]:
     """Hybrid search for `candidates` chunks, then a cross-encoder reorders them.
 
@@ -169,6 +198,9 @@ async def rerank_search(
         question: The user's question.
         k: Number of chunks to return.
         candidates: How many first-stage hits the reranker sees.
+        max_per_source: At most this many of the `k` hits from one document (0 = no limit,
+            the default from `RERANK_MAX_PER_SOURCE`). When set, the reranker scores every
+            candidate instead of only the top `k`, so lower-ranked documents can take the slots.
 
     Returns:
         Up to `k` hits, best first, `score` = the reranker's relevance score.
@@ -177,8 +209,9 @@ async def rerank_search(
     if not pool_hits:
         return []
     docs = [f"{h.heading}\n{h.content}" for h in pool_hits]
-    ranked = await reranker.rerank(question, docs, top_k=k)
-    return [replace(pool_hits[i], score=float(s)) for i, s in ranked]
+    cap = get_settings().rerank_max_per_source if max_per_source is None else max_per_source
+    ranked = await reranker.rerank(question, docs, top_k=len(docs) if cap > 0 else k)
+    return cap_per_source([replace(pool_hits[i], score=float(s)) for i, s in ranked], k, cap)
 
 
 async def search(

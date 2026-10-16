@@ -152,6 +152,39 @@ async def test_rerank_search_reorders_candidates_and_sets_scores(pool, emb):
     assert docs[0].startswith("Body") or "\n" in docs[0]  # heading + content are both sent
 
 
+def test_cap_per_source_spreads_hits_across_documents():
+    hs = [hit(1, "a.md"), hit(2, "a.md"), hit(3, "a.md"), hit(4, "b.md"), hit(5, "c.md")]
+    ids = lambda xs: [h.chunk_id for h in xs]  # noqa: E731
+    assert ids(retrieve.cap_per_source(hs, 4, 0)) == [1, 2, 3, 4]  # off
+    assert ids(retrieve.cap_per_source(hs, 4, 2)) == [1, 2, 4, 5]  # a.md capped at 2
+    assert ids(retrieve.cap_per_source(hs, 4, 1)) == [1, 4, 5, 2]  # too few documents: refill
+    assert ids(retrieve.cap_per_source(hs, 10, 1)) == [1, 4, 5, 2, 3]
+    assert retrieve.cap_per_source([], 3, 2) == []
+
+
+async def test_rerank_search_with_a_cap_scores_every_candidate(pool, emb):
+    await ingest_all(pool, emb)
+    rr = ReverseReranker()
+    out = await rerank_search(
+        pool, emb, rr, "static files status tests", k=2, candidates=4, max_per_source=1
+    )
+    assert rr.seen[2] == len(rr.seen[1])  # full ordering requested, not just the top 2
+    assert len(out) == 2 and len({h.source for h in out}) == 2
+
+
+async def test_rerank_search_cap_defaults_to_the_setting(pool, emb, monkeypatch):
+    await ingest_all(pool, emb)
+    monkeypatch.setenv("RERANK_MAX_PER_SOURCE", "1")
+    get_settings.cache_clear()
+    try:
+        rr = ReverseReranker()
+        await rerank_search(pool, emb, rr, "static files status tests", k=2, candidates=4)
+        assert rr.seen[2] == len(rr.seen[1])
+    finally:
+        monkeypatch.delenv("RERANK_MAX_PER_SOURCE")
+        get_settings.cache_clear()
+
+
 async def test_rerank_search_skips_the_reranker_when_nothing_is_found(pool, emb):
     rr = ReverseReranker()
     assert await rerank_search(pool, emb, rr, "nothing here", k=3) == [] and rr.seen is None

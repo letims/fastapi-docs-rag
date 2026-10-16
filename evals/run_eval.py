@@ -182,6 +182,7 @@ async def main() -> None:
     summary = {
         "mode": args.mode,
         "agent": args.agent,
+        "rerank_max_per_source": s.rerank_max_per_source if args.mode == "rerank" else None,
         "k": args.k,
         "n_answerable": len(answerable),
         "hit@k": round(sum(r["hit"] for r in answerable) / n, 3),

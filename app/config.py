@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # How many first-stage candidates the reranker sees, and which retriever the API uses.
     rerank_candidates: int = 20
     retrieval_mode: str = "vector"  # vector | hybrid | rerank
+    # Rerank only: at most this many of the k results from one document (0 = no limit).
+    rerank_max_per_source: int = 0
     # Phase 3 agent loop (retrieve -> grade -> plan -> retrieve ... -> answer).
     agent_default: bool = False  # /ask uses the agent unless the request says otherwise
     agent_max_rounds: int = 3  # retrieval rounds, hard cap
