@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 
 import pytest
@@ -330,3 +331,33 @@ def test_reranker_errors_are_clear(monkeypatch, clean_providers):
     get_settings.cache_clear()
     with pytest.raises(ValueError, match="unknown rerank provider"):
         providers.get_reranker()
+
+
+def _logged(caplog):
+    return [r.getMessage() for r in caplog.records]
+
+
+async def test_rerank_cap_logs_which_documents_it_pushed_out(monkeypatch, caplog):
+    hits = [Hit(i, "a.md" if i < 3 else f"b{i}.md", "h", "c", 0.0) for i in range(1, 6)]
+
+    async def fake_hybrid(*a, **k):
+        return hits
+
+    class Identity:
+        async def rerank(self, query, documents, top_k=None):
+            return [(i, 1.0 - i / 10) for i in range(len(documents))]
+
+    monkeypatch.setattr(retrieve, "hybrid_search", fake_hybrid)
+    caplog.set_level(logging.INFO, logger="app.rag.retrieve")
+    out = await rerank_search(None, None, Identity(), "q", k=3, candidates=5, max_per_source=1)
+    assert [h.chunk_id for h in out] == [1, 3, 4]
+    assert any(
+        "cap of 1 per document replaced 1 of the top 3" in x and "a.md" in x
+        for x in _logged(caplog)
+    )
+
+
+async def test_search_logs_what_it_found_and_when_it_found_nothing(pool, emb, caplog):
+    caplog.set_level(logging.INFO, logger="app.rag.retrieve")
+    assert await retrieve.search("vector", pool, emb, None, "anything at all", k=2) == []
+    assert any("(nothing found)" in x for x in _logged(caplog))

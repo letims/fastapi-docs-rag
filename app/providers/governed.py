@@ -62,7 +62,14 @@ class GovernedEmbedder:
     async def embed(self, texts: list[str], *, kind="document") -> list[list[float]]:
         """Embed in quota-sized batches, each one going through the governor; order is preserved."""
         out: list[list[float]] = []
-        for batch in split_batches(texts, self.max_batch_items, self.max_batch_tokens):
+        batches = split_batches(texts, self.max_batch_items, self.max_batch_tokens)
+        if len(batches) > 1:
+            log.debug(
+                "embed: %d texts split into %d calls to fit the quota window",
+                len(texts),
+                len(batches),
+            )
+        for batch in batches:
             units = len(batch) if self.unit == "text" else 1
             tokens = sum(estimate_tokens(t) for t in batch)
             out.extend(
@@ -112,6 +119,12 @@ class CachedEmbedder:
             else:
                 out[i] = unpack_vector(blob)
         self.hits += len(texts) - len(missing)
+        log.debug(
+            "embed cache: %d of %d texts already stored, %d to send",
+            len(texts) - len(missing),
+            len(texts),
+            len(missing),
+        )
         if missing:
             vectors = await self.inner.embed([texts[i] for i in missing], kind=kind)
             if len(vectors) != len(missing):
@@ -143,6 +156,7 @@ class CachedLLM:
         if blob is not None:
             d = _json.loads(blob)
             self.hits += 1
+            log.debug("llm cache: hit, no request")
             return LLMResult(d["text"], d["in"], d["out"], cached=True)
         res = await self.inner.generate(prompt, system=system, json=json, temperature=temperature)
         self.misses += 1
@@ -200,6 +214,7 @@ class CachedReranker:
         blob = self.cache.get(key)
         if blob is not None:
             self.hits += 1
+            log.debug("rerank cache: hit, no request")
             return [(int(i), float(s)) for i, s in _json.loads(blob)]
         res = await self.inner.rerank(query, documents, top_k)
         self.misses += 1

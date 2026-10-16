@@ -1,6 +1,7 @@
 """HTTP API: POST /documents (ingest), POST /ask (answer, optionally with the agent loop),
 GET /ingest/stats and GET /health."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,11 +11,14 @@ from pydantic import BaseModel, Field
 from app.config import get_settings
 from app.db import close_pool, init_schema, open_pool
 from app.ingest import queue
+from app.logging_config import setup_logging
 from app.providers import get_embedder, get_llm, get_reranker
 from app.quota import QuotaExhausted, seconds_until_reset
 from app.rag.agent import run_agent
 from app.rag.generate import generate_answer
 from app.rag.retrieve import search
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -23,8 +27,18 @@ async def lifespan(app: FastAPI):
 
     The pool is stored on `app.state.pool` for the endpoints to use.
     """
+    setup_logging()
     app.state.pool = await open_pool()
     await init_schema(app.state.pool)
+    s = get_settings()
+    log.info(
+        "API ready: embeddings=%s llm=%s rerank=%s retrieval=%s agent_default=%s",
+        s.embed_backend,
+        s.llm_backend,
+        s.rerank_backend,
+        s.retrieval_mode,
+        s.agent_default,
+    )
     yield
     await close_pool()
 
@@ -36,6 +50,7 @@ app = FastAPI(title="fastapi-docs-rag", lifespan=lifespan)
 async def quota_exhausted_handler(_request, exc: QuotaExhausted):
     """Map an exhausted daily API budget to HTTP 429 with a Retry-After header (seconds to reset)."""
     retry_after = int(seconds_until_reset())
+    log.warning("quota exhausted (%s): answering 429, retry in %d s", exc, retry_after)
     return JSONResponse(
         status_code=429,
         content={"error": "quota_exhausted", "detail": str(exc), "retry_after_s": retry_after},
@@ -138,7 +153,15 @@ async def ask(body: AskIn):
     """
     s = get_settings()
     reranker = get_reranker() if s.retrieval_mode == "rerank" else None
-    if body.agent if body.agent is not None else s.agent_default:
+    use_agent = body.agent if body.agent is not None else s.agent_default
+    log.info(
+        "ask: retrieval=%s agent=%s k=%d question=%r",
+        s.retrieval_mode,
+        use_agent,
+        body.k,
+        body.question[:60],
+    )
+    if use_agent:
         res = await run_agent(
             app.state.pool,
             get_embedder(),

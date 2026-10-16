@@ -1,6 +1,7 @@
 """Retrieval: vector search, keyword search, Reciprocal Rank Fusion, reranking and the per-document
 cap. `search(mode, ...)` is the single entry point used by the API, the agent and the evals."""
 
+import logging
 import re
 from dataclasses import dataclass, replace
 
@@ -9,6 +10,8 @@ from psycopg_pool import AsyncConnectionPool
 from app.config import get_settings
 from app.db import vec_literal
 from app.providers.base import Embedder, Reranker
+
+log = logging.getLogger(__name__)
 
 RRF_K = 60  # the constant from the original RRF paper; larger flattens the rank weighting
 MODES = ("vector", "hybrid", "rerank")
@@ -149,7 +152,16 @@ async def hybrid_search(
     """
     vec = await vector_search(pool, embedder, question, candidates)
     kw = await keyword_search(pool, question, candidates)
-    return rrf_fuse([vec, kw])[:k]
+    fused = rrf_fuse([vec, kw])
+    log.debug(
+        "hybrid: vector %d + keyword %d candidates, %d found by both, %d after fusion, keeping %d",
+        len(vec),
+        len(kw),
+        len({h.chunk_id for h in vec} & {h.chunk_id for h in kw}),
+        len(fused),
+        k,
+    )
+    return fused[:k]
 
 
 def cap_per_source(ranked: list[Hit], k: int, cap: int) -> list[Hit]:
@@ -211,7 +223,20 @@ async def rerank_search(
     docs = [f"{h.heading}\n{h.content}" for h in pool_hits]
     cap = get_settings().rerank_max_per_source if max_per_source is None else max_per_source
     ranked = await reranker.rerank(question, docs, top_k=len(docs) if cap > 0 else k)
-    return cap_per_source([replace(pool_hits[i], score=float(s)) for i, s in ranked], k, cap)
+    scored = [replace(pool_hits[i], score=float(s)) for i, s in ranked]
+    final = cap_per_source(scored, k, cap)
+    if cap > 0:
+        dropped = [h.source for h in scored[:k] if h not in final]
+        if dropped:
+            log.info(
+                "rerank cap of %d per document replaced %d of the top %d: dropped chunks from %s",
+                cap,
+                len(dropped),
+                k,
+                sorted(set(dropped)),
+            )
+    log.debug("rerank: scored %d candidates, keeping %d", len(docs), len(final))
+    return final
 
 
 async def search(
@@ -229,11 +254,24 @@ async def search(
         ValueError: Unknown mode, or "rerank" without a reranker.
     """
     if mode == "vector":
-        return await vector_search(pool, embedder, question, k)
-    if mode == "hybrid":
-        return await hybrid_search(pool, embedder, question, k, candidates)
-    if mode == "rerank":
+        hits = await vector_search(pool, embedder, question, k)
+    elif mode == "hybrid":
+        hits = await hybrid_search(pool, embedder, question, k, candidates)
+    elif mode == "rerank":
         if reranker is None:
             raise ValueError("mode 'rerank' needs a reranker")
-        return await rerank_search(pool, embedder, reranker, question, k, candidates)
-    raise ValueError(f"unknown retrieval mode {mode!r} (choose from {', '.join(MODES)})")
+        hits = await rerank_search(pool, embedder, reranker, question, k, candidates)
+    else:
+        raise ValueError(f"unknown retrieval mode {mode!r} (choose from {', '.join(MODES)})")
+    sources = list(dict.fromkeys(h.source for h in hits))
+    log.info(
+        "search %s k=%d %r: %d chunks from %d documents %s%s",
+        mode,
+        k,
+        question[:60],
+        len(hits),
+        len(sources),
+        sources[:4],
+        "" if hits else " (nothing found)",
+    )
+    return hits

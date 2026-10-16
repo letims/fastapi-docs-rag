@@ -6,6 +6,7 @@ python -m scripts.enqueue_corpus corpus/fastapi [--limit N]
 import argparse
 import asyncio
 import json
+import logging
 import random
 from pathlib import Path
 
@@ -13,6 +14,9 @@ from app.config import get_settings
 from app.db import close_pool, init_schema, open_pool
 from app.ingest.chunker import extract_title
 from app.ingest.queue import enqueue_many
+from app.logging_config import setup_logging
+
+log = logging.getLogger(__name__)
 
 QUESTIONS = Path(__file__).parent.parent / "evals" / "questions.jsonl"
 
@@ -54,12 +58,15 @@ async def main() -> None:
         help="dev corpus of N docs: every eval-expected doc + seeded distractors",
     )
     args = ap.parse_args()
+    setup_logging()
 
     root = Path(args.root)
     exclude = set(get_settings().corpus_exclude)
     docs = []
+    n_excluded = 0
     for p in sorted(root.rglob("*.md")):
         if p.name in exclude:
+            n_excluded += 1
             continue
         text = p.read_text(encoding="utf-8")
         source = p.relative_to(root).as_posix()
@@ -75,6 +82,13 @@ async def main() -> None:
     if args.limit:
         docs = docs[: args.limit]
 
+    log.info(
+        "corpus: %d markdown files found under %s, %d excluded as noise%s",
+        len(docs) + n_excluded,
+        root,
+        n_excluded,
+        f"; keeping a {args.subset}-document dev subset" if args.subset else "",
+    )
     pool = await open_pool()
     await init_schema(pool)
     created = await enqueue_many(pool, docs)

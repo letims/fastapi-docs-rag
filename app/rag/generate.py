@@ -1,12 +1,15 @@
 """Answer generation: the system prompt (answer only from numbered passages, cite as [n],
 abstain with INSUFFICIENT_CONTEXT), citation parsing and the `Answer` result."""
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
 
 from app.providers.base import LLM
 from app.rag.retrieve import Hit
+
+log = logging.getLogger(__name__)
 
 NO_ANSWER = "INSUFFICIENT_CONTEXT"
 
@@ -95,7 +98,7 @@ async def generate_answer(llm: LLM, question: str, hits: list[Hit]) -> Answer:
     t0 = time.perf_counter()
     res = await llm.generate(build_prompt(question, hits), system=SYSTEM)
     cited = parse_citations(res.text, len(hits))
-    return Answer(
+    answer = Answer(
         question=question,
         text=res.text.strip(),
         abstained=res.text.strip().startswith(NO_ANSWER),
@@ -106,3 +109,15 @@ async def generate_answer(llm: LLM, question: str, hits: list[Hit]) -> Answer:
         latency_s=time.perf_counter() - t0,
         cached=res.cached,
     )
+    log.info(
+        "answer: %d passages given, cited %s, %s, %d tokens in / %d out%s",
+        len(hits),
+        cited or "none",
+        "ABSTAINED" if answer.abstained else "answered",
+        res.input_tokens,
+        res.output_tokens,
+        " (from cache)" if res.cached else "",
+    )
+    if not answer.abstained and not cited:
+        log.warning("answer: not abstaining but cites no passage; it will count as uncited")
+    return answer

@@ -257,3 +257,35 @@ async def test_grader_override_triggers_a_decompose_round(monkeypatch):
     first_grade = res.trace[1]
     assert first_grade["overridden"] is True
     assert first_grade["parts"] == [{"part": "bg tasks", "passage": None}]
+
+
+async def test_every_decision_of_the_loop_is_logged(monkeypatch, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.rag.agent")
+    table = {"Q?": [H(1)], "part A": [H(2)]}
+    llm = ScriptedLLM([V(missing=["part A"]), V_OK])
+    await go(monkeypatch, table, llm)
+    m = [r.getMessage() for r in caplog.records]
+    assert any("round 1: 1 query" in x for x in m)
+    assert any("round 1: found 1 new chunks, 1 from documents not seen before" in x for x in m)
+    assert any("evidence is NOT sufficient" in x for x in m)
+    assert any(x.startswith("agent plan: decompose") and "part A" in x for x in m)
+    assert any("evidence is sufficient" in x for x in m)
+    assert any("agent done: stopped because sufficient after 2 round(s)" in x for x in m)
+
+
+async def test_each_stop_rule_says_why_it_stopped(monkeypatch, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.rag.agent")
+    await go(monkeypatch, {"Q?": [H(1)]}, ScriptedLLM([V(missing=["a"])]), max_rounds=1)
+    table = {"Q?": [H(1, "a.md")], "a": [H(2, "a.md")]}
+    await go(monkeypatch, table, ScriptedLLM([V(missing=["a"])]))
+    await go(
+        monkeypatch, {"Q?": [H(1)], "a": [H(2)]}, ScriptedLLM([V(missing=["a"])]), token_budget=10
+    )
+    m = [r.getMessage() for r in caplog.records]
+    assert any("reached the limit of 1 rounds" in x for x in m)
+    assert any("brought no document not seen before" in x for x in m)
+    assert any("over the budget of 10" in x for x in m)

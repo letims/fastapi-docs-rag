@@ -245,6 +245,14 @@ async def run_agent(
         queries = state["queries"]
         runs, tried, before = [], [], {h.chunk_id for r in state.get("runs", []) for h in r["hits"]}
         widen = state.get("widened", False) and rounds > 1
+        log.info(
+            "agent round %d: %d quer%s%s: %s",
+            rounds,
+            len(queries),
+            "y" if len(queries) == 1 else "ies",
+            ", widened" if widen else "",
+            [q[:60] for q in queries],
+        )
         for q in queries:
             n = k if rounds == 1 else per_query * (2 if widen else 1)
             hits = await search(mode, pool, embedder, reranker, q, n, candidates)
@@ -253,6 +261,12 @@ async def run_agent(
         added = {h.chunk_id for r in runs for h in r["hits"]} - before
         seen_sources = {h.source for r in state.get("runs", []) for h in r["hits"]}
         new_sources = {h.source for r in runs for h in r["hits"]} - seen_sources
+        log.info(
+            "agent round %d: found %d new chunks, %d from documents not seen before",
+            rounds,
+            len(added),
+            len(new_sources),
+        )
         step = {
             "step": "retrieve",
             "round": rounds,
@@ -272,13 +286,17 @@ async def run_agent(
 
     def route_after_retrieve(state: AgentState) -> str:
         """Hard stops come first (max rounds, no new document, token budget); otherwise grade."""
+        used = state.get("tokens_in", 0) + state.get("tokens_out", 0)
         if state["rounds"] >= max_rounds:
+            log.info("agent stop: reached the limit of %d rounds", max_rounds)
             return "stop_max_rounds"
         # Follow-up rounds must bring a document not seen before: more chunks from documents
         # already in hand are usually the same material reworded (measured on q17).
         if state["rounds"] > 1 and state["new_sources"] == 0:
+            log.info("agent stop: round %d brought no document not seen before", state["rounds"])
             return "stop_no_progress"
-        if state.get("tokens_in", 0) + state.get("tokens_out", 0) > token_budget:
+        if used > token_budget:
+            log.info("agent stop: %d tokens used, over the budget of %d", used, token_budget)
             return "stop_token_budget"
         return "grade"
 
@@ -312,6 +330,15 @@ async def run_agent(
                     "rewrite": verdict["rewrite"],
                 }
             ]
+            uncovered = [p["part"][:60] for p in verdict["parts"] if p["passage"] is None]
+            log.info(
+                "agent grade: %s%s; uncovered parts: %s",
+                "evidence is sufficient" if verdict["sufficient"] else "evidence is NOT sufficient",
+                " (overridden: the grader said sufficient but left a part without a passage)"
+                if verdict["overridden"]
+                else "",
+                uncovered or "none",
+            )
             if verdict["sufficient"]:
                 update["stop_reason"] = "sufficient"
         return update
@@ -324,6 +351,11 @@ async def run_agent(
         """Turn the grader's verdict into the next queries (decompose, rewrite or widen), or stop."""
         action, queries = plan_next(
             state["verdict"], state.get("tried", []), state["question"], state.get("widened", False)
+        )
+        log.info(
+            "agent plan: %s%s",
+            action,
+            f" -> {[q[:60] for q in queries]}" if queries else " (no new query to try; answering)",
         )
         update: dict = {
             "queries": queries,
@@ -388,6 +420,13 @@ async def run_agent(
 
     final = await g.compile().ainvoke({"question": question, "queries": [question]})
     ctx = select_context(final["runs"], k + extra_context)
+    log.info(
+        "agent done: stopped because %s after %d round(s), %d tokens, %.1fs",
+        final.get("stop_reason", "sufficient"),
+        final["rounds"],
+        final.get("tokens_in", 0) + final.get("tokens_out", 0),
+        time.perf_counter() - t0,
+    )
     return AgentResult(
         answer=final["answer"],
         rounds=final["rounds"],

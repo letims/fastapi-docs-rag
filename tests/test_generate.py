@@ -66,3 +66,16 @@ async def test_fullwidth_brackets_still_count_as_a_citation():
 def test_prompt_demands_plain_brackets_and_citations_on_partial_answers():
     assert "plain ASCII square brackets" in SYSTEM
     assert "Not found:" in SYSTEM
+
+
+async def test_answer_is_logged_and_an_uncited_answer_is_flagged(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="app.rag.generate")
+    await generate_answer(StubLLM("Use X [2]."), "q", make_hits())
+    await generate_answer(StubLLM("An answer with no citation."), "q", make_hits())
+    await generate_answer(StubLLM(NO_ANSWER + " missing info"), "q", make_hits())
+    levels = [(r.levelname, r.getMessage()) for r in caplog.records]
+    assert any("cited [2], answered" in m for _, m in levels)
+    assert any("ABSTAINED" in m for _, m in levels)
+    assert any(lv == "WARNING" and "cites no passage" in m for lv, m in levels)

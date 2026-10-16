@@ -47,7 +47,8 @@ When you want to run things, [make commands](docs/commands.md) walks through eve
 order you would use them, what each one needs first, and the pre-commit hook that blocks a commit on
 lint errors, failing tests or a leaked key. To understand the numbers, [evaluation method](docs/evaluation.md)
 describes the 21 questions, the metrics and the rules for what may appear in the results table, and
-[tests and coverage](docs/testing.md) covers the test suite and the 90% coverage gate.
+[tests and coverage](docs/testing.md) covers the test suite and the 90% coverage gate, and
+[logging](docs/logging.md) explains what the logs show and how to turn on more detail (`LOG_LEVEL=DEBUG`).
 
 ## Quickstart
 

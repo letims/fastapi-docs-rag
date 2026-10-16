@@ -1,9 +1,12 @@
+import logging
+
 from app.cache import DiskCache
 from app.config import Settings, get_settings
 from app.db import open_pool
 
 from .base import LLM, Embedder, Reranker
 
+log = logging.getLogger(__name__)
 _cache: dict[str, object] = {}
 
 
@@ -24,6 +27,9 @@ def _governor(s: Settings, api: str, is_rate_limited):
 
     rpm, tpm, rpd = s.quota(api)
     limits = Limits(rpm, tpm, rpd)
+    log.info(
+        "quota %s: %d requests/min, %d tokens/min, %d requests/day", s.usage_key(api), rpm, tpm, rpd
+    )
     return limits, Governor(
         api,
         limits,
@@ -114,6 +120,12 @@ def get_embedder() -> Embedder:
             )
             if s.api_cache:
                 emb = CachedEmbedder(emb, get_disk_cache(), model)
+        log.info(
+            "embedder ready: %s, dim %d, disk cache %s",
+            s.embed_backend,
+            s.embed_dim,
+            "on" if s.api_cache and s.embed_backend != "fake" else "off",
+        )
         _cache["embedder"] = emb
     return _cache["embedder"]  # type: ignore[return-value]
 
@@ -134,6 +146,11 @@ def get_llm() -> LLM:
             llm = GovernedLLM(inner, gov, output_reserve=s.llm_output_token_reserve)
             if s.api_cache:
                 llm = CachedLLM(llm, get_disk_cache(), model)
+        log.info(
+            "llm ready: %s, disk cache %s",
+            s.llm_backend,
+            "on" if s.api_cache and s.llm_backend != "fake" else "off",
+        )
         _cache["llm"] = llm
     return _cache["llm"]  # type: ignore[return-value]
 
@@ -159,5 +176,6 @@ def get_reranker() -> Reranker:
                 rr = CachedReranker(rr, get_disk_cache(), s.voyage_rerank_model)
         else:
             raise ValueError(f"unknown rerank provider {backend!r} (voyage | fake)")
+        log.info("reranker ready: %s", backend)
         _cache["reranker"] = rr
     return _cache["reranker"]  # type: ignore[return-value]

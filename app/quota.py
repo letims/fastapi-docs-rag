@@ -152,7 +152,16 @@ class DailyBudget:
                 self.api,
                 f"daily budget of {self.rpd} used up; resets in {seconds_until_reset() / 3600:.1f} h",
             )
-        return row["requests"]
+        used = row["requests"]
+        if used >= 0.8 * self.rpd and used - units < 0.8 * self.rpd:
+            log.warning(
+                "daily budget %s: %d of %d requests used (80%%); it resets in %.1f h",
+                self.api,
+                used,
+                self.rpd,
+                seconds_until_reset() / 3600,
+            )
+        return used
 
     async def used(self, *, day: date | None = None) -> int:
         """Requests counted so far today (0 if none)."""

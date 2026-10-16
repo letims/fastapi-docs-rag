@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     # Chunking
     chunk_max_chars: int = 1800
 
+    # Logging: DEBUG | INFO | WARNING. Progress lines from the worker appear every this many seconds.
+    log_level: str = "INFO"
+    progress_interval_s: float = 30.0
+
     # Files that add noise to retrieval (changelogs, people lists, translation test pages)
     corpus_exclude: tuple[str, ...] = (
         "_llm-test.md",

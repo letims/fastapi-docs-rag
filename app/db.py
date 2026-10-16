@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 
 from psycopg.rows import dict_row
@@ -91,11 +92,15 @@ async def build_vector_index(pool: AsyncConnectionPool) -> None:
     Returns:
         None.
     """
+    t0 = time.perf_counter()
     async with pool.connection() as conn:
+        n = await (await conn.execute("SELECT count(*) AS n FROM chunks")).fetchone()
+        log.info("vector index: building HNSW over %d chunks (created after the bulk load)", n["n"])
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
             "ON chunks USING hnsw (embedding vector_cosine_ops)"
         )
+    log.info("vector index: ready in %.1fs", time.perf_counter() - t0)
 
 
 if __name__ == "__main__":

@@ -4,9 +4,13 @@ Why Postgres and not Redis/SQS here: one fewer moving part for a prototype, jobs
 transactional with the data they produce, and FOR UPDATE SKIP LOCKED gives safe concurrent
 claiming. At higher volume or fan-out I'd move to SQS/Cloud Tasks (see README)."""
 
+import logging
+
 from psycopg_pool import AsyncConnectionPool
 
 from app.retry import backoff_delay
+
+log = logging.getLogger(__name__)
 
 
 async def enqueue_many(pool: AsyncConnectionPool, docs: list[tuple[str, str, str]]) -> int:
@@ -30,6 +34,12 @@ async def enqueue_many(pool: AsyncConnectionPool, docs: list[tuple[str, str, str
                 (source, title, content),
             )
             created += cur.rowcount
+    log.info(
+        "enqueue: %d documents received, %d new jobs, %d already queued (pending or running)",
+        len(docs),
+        created,
+        len(docs) - created,
+    )
     return created
 
 
@@ -62,7 +72,17 @@ async def claim(pool: AsyncConnectionPool, visibility_timeout_s: int) -> dict | 
             RETURNING id, source, title, content, attempts""",
             (visibility_timeout_s,),
         )
-        return await cur.fetchone()
+        job = await cur.fetchone()
+    if job and job["attempts"] > 1:
+        log.info(
+            "claim: job %s (%s) is on attempt %d: an earlier attempt failed or its worker died",
+            job["id"],
+            job["source"],
+            job["attempts"],
+        )
+    elif job:
+        log.debug("claim: job %s (%s), first attempt", job["id"], job["source"])
+    return job
 
 
 async def heartbeat(pool: AsyncConnectionPool, job_id: int) -> None:
@@ -117,6 +137,13 @@ async def fail(
                 "updated_at=now() WHERE id=%s",
                 (error[:2000], job_id),
             )
+        log.warning(
+            "job %s failed for good after %d of %d attempts: %s",
+            job_id,
+            attempts,
+            max_attempts,
+            error[:200],
+        )
         return False
     delay = backoff_delay(attempts, base=5.0, cap=300.0)
     async with pool.connection() as conn:
@@ -125,6 +152,13 @@ async def fail(
             "run_after=now() + make_interval(secs => %s), updated_at=now() WHERE id=%s",
             (error[:2000], delay, job_id),
         )
+    log.info(
+        "job %s: attempt %d of %d failed; retry in %.0fs (exponential backoff with jitter)",
+        job_id,
+        attempts,
+        max_attempts,
+        delay,
+    )
     return True
 
 
@@ -146,6 +180,11 @@ async def release(pool: AsyncConnectionPool, job_id: int, delay_s: float) -> Non
             "WHERE id=%s",
             (delay_s, job_id),
         )
+    log.info(
+        "job %s released for %.1f h (daily API budget used up); the attempt does not count",
+        job_id,
+        delay_s / 3600,
+    )
 
 
 async def stats(pool: AsyncConnectionPool) -> dict:

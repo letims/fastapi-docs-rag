@@ -7,6 +7,7 @@ Idempotency layers:
 Re-running the whole corpus is therefore cheap and safe."""
 
 import logging
+import time
 from dataclasses import dataclass
 
 from psycopg_pool import AsyncConnectionPool
@@ -64,12 +65,16 @@ async def ingest_document(
         RuntimeError: If the embedder returns a different number of vectors than texts.
     """
     new_doc_hash = doc_hash(content)
+    t0 = time.perf_counter()
 
     async with pool.connection() as conn:
         row = await (
             await conn.execute("SELECT id, content_hash FROM documents WHERE source=%s", (source,))
         ).fetchone()
         if row and row["content_hash"] == new_doc_hash:
+            log.debug(
+                "%s: unchanged (hash %s), skipped with no embedding calls", source, new_doc_hash[:8]
+            )
             return IngestResult("skipped")
         existing: dict[str, str] = {}
         if row:
@@ -80,6 +85,7 @@ async def ingest_document(
             existing = {r["content_hash"]: r["emb"] for r in await cur.fetchall()}
 
     chunks = chunk_markdown(content, title, max_chars)
+    reason = "content changed" if row else "new document"
     embeddings: dict[str, str] = {}  # chunk hash -> pgvector literal
     missing = []
     for c in chunks:
@@ -89,9 +95,30 @@ async def ingest_document(
             embeddings[c.content_hash] = ""  # placeholder, dedupes identical chunks
             missing.append(c)
 
+    reused = len(chunks) - len(missing)
+    dropped = len(set(existing) - {c.content_hash for c in chunks})
+    log.info(
+        "%s: %s: %d chunks, %d reuse a stored embedding, %d to embed%s",
+        source,
+        reason,
+        len(chunks),
+        reused,
+        len(missing),
+        f", {dropped} old chunks dropped" if row else "",
+    )
+    if len(chunks) != len(set(c.content_hash for c in chunks)):
+        log.debug("%s: identical chunks inside this document share one embedding", source)
+
     # Network calls happen with no DB connection held.
     for i in range(0, len(missing), batch_size):
         batch = missing[i : i + batch_size]
+        log.debug(
+            "%s: embedding batch %d of %d (%d texts)",
+            source,
+            i // batch_size + 1,
+            -(-len(missing) // batch_size),
+            len(batch),
+        )
         vectors = await embedder.embed([c.embed_text for c in batch], kind="document")
         if len(vectors) != len(batch):
             raise RuntimeError(f"embedder returned {len(vectors)} vectors for {len(batch)} texts")
@@ -125,6 +152,12 @@ async def ingest_document(
                         for c in chunks
                     ],
                 )
+    log.debug(
+        "%s: stored %d chunks in one transaction (%.2fs total)",
+        source,
+        len(chunks),
+        time.perf_counter() - t0,
+    )
     return IngestResult(
         "ingested",
         chunks_total=len(chunks),

@@ -21,12 +21,12 @@ compared side by side."""
 import argparse
 import asyncio
 import json
-import logging
 import time
 from pathlib import Path
 
 from app.config import get_settings
 from app.db import close_pool, open_pool
+from app.logging_config import setup_logging
 from app.providers import get_embedder, get_llm, get_reranker
 from app.quota import QuotaExhausted
 from app.rag.agent import run_agent
@@ -90,8 +90,7 @@ async def main() -> None:
     ap.add_argument("--only", default="", help="comma-separated question ids, e.g. q14,q16,q17")
     args = ap.parse_args()
     # Show the limiter's "waiting Ns" lines: with a low RPM the run is slow, and silence looks like a hang.
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    setup_logging()
 
     questions = [json.loads(line) for line in QUESTIONS.read_text().splitlines() if line.strip()]
     if args.only:

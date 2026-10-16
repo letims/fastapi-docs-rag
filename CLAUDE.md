@@ -48,7 +48,12 @@ Voyage (embeddings) + Groq (chat) free tiers, Gemini optional, all behind provid
 
 ## Docs layout
 README is deliberately short (context, setup, how to read the results). Detail lives in `docs/`:
-architecture, ingestion, quotas, commands, evaluation, testing. Put new detail there, not in the README.
+architecture, ingestion, quotas, commands, evaluation, testing, logging. Put new detail there, not in the README.
+
+## Logging
+- Use `logging.getLogger(__name__)`; entry points call `setup_logging()` (`app/logging_config.py`).
+- `INFO` for decisions and milestones (skip vs re-embed, retries, stop reasons), `DEBUG` for per-item detail,
+  `WARNING` for degraded paths. Never log keys, prompts or document text. See `docs/logging.md`.
 
 ## Retrieval and agent notes
 - `search(mode, ...)` in `app/rag/retrieve.py` is the one retrieval entry point (vector | hybrid | rerank).
