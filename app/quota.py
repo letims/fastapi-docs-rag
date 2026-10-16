@@ -78,6 +78,11 @@ class SlidingWindowLimiter:
         self._lock = asyncio.Lock()
 
     async def acquire(self, units: int = 1, tokens: int = 0) -> None:
+        """Wait until `units` requests and `tokens` tokens fit in the rolling window, then count them.
+
+        Raises:
+            ValueError: One call alone is bigger than a whole minute allows (it must be split).
+        """
         if units > self.rpm or tokens > self.tpm:
             raise ValueError(
                 f"a single call ({units} units, {tokens} tokens) exceeds the per-minute limits "
@@ -106,6 +111,9 @@ class SlidingWindowLimiter:
 
 
 class Budget(Protocol):
+    """A daily request counter. `reserve` raises `QuotaExhausted` when the day is used up;
+    `mark_exhausted` records that the provider itself said so."""
+
     async def reserve(self, units: int) -> None: ...
     async def mark_exhausted(self) -> None: ...
 
@@ -125,6 +133,11 @@ class DailyBudget:
         self.api, self.rpd, self._get_pool = api, rpd, get_pool
 
     async def reserve(self, units: int = 1, *, day: date | None = None) -> int:
+        """Atomically add `units` to today's counter and return the new total.
+
+        Raises:
+            QuotaExhausted: The addition would pass the daily limit (nothing is added).
+        """
         if units > self.rpd:
             raise QuotaExhausted(
                 self.api, f"a call needs {units} units but the daily limit is {self.rpd}"
@@ -142,6 +155,7 @@ class DailyBudget:
         return row["requests"]
 
     async def used(self, *, day: date | None = None) -> int:
+        """Requests counted so far today (0 if none)."""
         pool = await self._get_pool()
         async with pool.connection() as conn:
             row = await (
@@ -153,6 +167,7 @@ class DailyBudget:
         return row["requests"] if row else 0
 
     async def mark_exhausted(self, *, day: date | None = None) -> None:
+        """Set today's counter to the limit, after the provider refused a request we thought was ok."""
         pool = await self._get_pool()
         async with pool.connection() as conn:
             await conn.execute(
@@ -164,6 +179,11 @@ class DailyBudget:
 
 
 class Governor:
+    """The single door for calls to one external API: daily budget, then per-minute window, then the call.
+
+    A 429 despite our own limits gets one cool-down and one retry; a second 429 marks the day used up
+    and raises `QuotaExhausted`, which callers treat as "pause", not "fail"."""
+
     def __init__(
         self,
         api: str,
@@ -180,6 +200,16 @@ class Governor:
         self.limiter = SlidingWindowLimiter(limits.rpm, limits.tpm, clock=clock, sleep=sleep)
 
     async def call(self, fn: Callable[[], Awaitable[T]], *, units: int = 1, tokens: int = 0) -> T:
+        """Run `fn` (one provider call) under the budget and rate limits.
+
+        Args:
+            fn: Zero-argument async function that performs the call; may be run twice (after a 429).
+            units: Request units this call counts for (texts, or 1 per call).
+            tokens: Estimated tokens, for the per-minute token limit.
+
+        Raises:
+            QuotaExhausted: Daily budget used up, or the provider kept answering 429.
+        """
         await self.budget.reserve(units)  # raises QuotaExhausted BEFORE touching the network
         await self.limiter.acquire(units, tokens)
         try:

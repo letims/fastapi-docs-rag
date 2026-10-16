@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS ingest_jobs_claim_idx ON ingest_jobs(status, run_afte
 -- Client-side daily request counter (see app/quota.py). One row per (Pacific day, api).
 CREATE TABLE IF NOT EXISTS api_usage (
   day      DATE NOT NULL,
-  api      TEXT NOT NULL,            -- 'embed' | 'llm'
+  api      TEXT NOT NULL,            -- role:provider, e.g. 'embed:voyage', 'llm:groq', 'rerank:voyage'
   requests INT  NOT NULL DEFAULT 0,
   PRIMARY KEY (day, api)
 );

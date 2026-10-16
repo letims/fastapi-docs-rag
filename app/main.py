@@ -1,3 +1,6 @@
+"""HTTP API: POST /documents (ingest), POST /ask (answer, optionally with the agent loop),
+GET /ingest/stats and GET /health."""
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -116,8 +119,12 @@ async def ask(body: AskIn):
     answer only from those chunks. If the chunks do not contain the answer the LLM replies
     `INSUFFICIENT_CONTEXT` and `abstained` is true.
 
+    With `agent` true (or `AGENT_DEFAULT`), the Phase 3 loop runs instead: it grades the evidence
+    and may retrieve again before answering. Each call is independent; there is no conversation
+    memory.
+
     Args:
-        body: The question and how many chunks (`k`) to retrieve.
+        body: The question, how many chunks (`k`) to retrieve, and whether to use the agent loop.
 
     Returns:
         A dict with:
@@ -127,6 +134,7 @@ async def ask(body: AskIn):
           - retrieved: every retrieved passage (source, heading, score; the scale depends on the retrieval mode), in rank order.
           - usage: input/output token counts for the LLM call.
           - latency_s: LLM generation time in seconds (retrieval time is not included).
+          - agent: only when the loop ran: rounds, stop_reason, queries tried and a readable trace.
     """
     s = get_settings()
     reranker = get_reranker() if s.retrieval_mode == "rerank" else None

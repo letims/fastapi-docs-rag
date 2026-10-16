@@ -31,6 +31,7 @@ class OpenAICompatLLM:
     async def generate(
         self, prompt: str, *, system: str = "", json: bool = False, temperature: float = 0.0
     ) -> LLMResult:
+        """Send one chat request and return the first choice; `json=True` asks for a JSON object."""
         messages = ([{"role": "system", "content": system}] if system else []) + [
             {"role": "user", "content": prompt}
         ]

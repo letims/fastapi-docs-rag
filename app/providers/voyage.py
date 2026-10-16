@@ -35,6 +35,7 @@ class VoyageEmbedder:
     async def embed(
         self, texts: list[str], *, kind: Literal["document", "query"] = "document"
     ) -> list[list[float]]:
+        """Embed `texts` in one request; `kind` maps to Voyage's `input_type` (document or query)."""
         body = await post_json(
             self.client,
             f"{BASE_URL}/embeddings",

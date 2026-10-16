@@ -1,8 +1,10 @@
 """Wrappers that make any provider quota-safe and (optionally) free on repeat.
 
-    CachedEmbedder -> GovernedEmbedder -> GeminiEmbedder      (same for the LLM)
+    CachedEmbedder -> GovernedEmbedder -> <vendor embedder>   (same for the LLM and the reranker)
 
-Cache is outermost so a hit costs nothing: no budget reserved, no waiting, no network."""
+Cache is outermost so a hit costs nothing: no budget reserved, no waiting, no network. The
+governed layer sits between the cache and the vendor: it splits oversized batches, reserves the
+daily budget, waits for the per-minute window and handles a 429 (see `app/quota.py`)."""
 
 import json as _json
 import logging
@@ -17,6 +19,9 @@ MAX_TEXTS_PER_CALL = 100  # assumed Gemini batchEmbedContents cap; also the "cal
 
 
 def split_batches(texts: list[str], max_items: int, max_tokens: int) -> list[list[str]]:
+    """Group texts, in order, into batches of at most `max_items` texts and about `max_tokens`
+    tokens, so every provider call fits inside one minute of quota. A single text larger than
+    `max_tokens` still gets its own batch."""
     batches: list[list[str]] = []
     cur: list[str] = []
     cur_tokens = 0
@@ -55,6 +60,7 @@ class GovernedEmbedder:
         self.max_batch_tokens = min(max_batch_tokens, limits.tpm)
 
     async def embed(self, texts: list[str], *, kind="document") -> list[list[float]]:
+        """Embed in quota-sized batches, each one going through the governor; order is preserved."""
         out: list[list[float]] = []
         for batch in split_batches(texts, self.max_batch_items, self.max_batch_tokens):
             units = len(batch) if self.unit == "text" else 1
@@ -68,6 +74,9 @@ class GovernedEmbedder:
 
 
 class GovernedLLM:
+    """Runs every LLM call through the governor. The token cost it reserves is the prompt plus
+    `output_reserve`, because the reply length is not known before the call."""
+
     def __init__(self, inner: LLM, governor: Governor, *, output_reserve: int):
         self.inner, self.governor, self.output_reserve = inner, governor, output_reserve
 
@@ -83,6 +92,9 @@ class GovernedLLM:
 
 
 class CachedEmbedder:
+    """Looks every text up in the disk cache first and sends only the misses to the inner embedder,
+    so re-embedding text that was embedded before costs no API request. `hits`/`misses` count texts."""
+
     def __init__(self, inner: Embedder, cache: DiskCache, model: str):
         self.inner, self.cache, self.model, self.dim = inner, cache, model, inner.dim
         self.max_batch_items = getattr(inner, "max_batch_items", MAX_TEXTS_PER_CALL)
@@ -114,6 +126,11 @@ class CachedEmbedder:
 
 
 class CachedLLM:
+    """Disk cache for LLM replies, keyed by model, temperature, json flag, system prompt and prompt.
+
+    A repeated prompt returns the stored reply (`cached=True`, no request). This makes eval re-runs
+    free but also hides run-to-run variance: turn `API_CACHE` off for final numbers."""
+
     def __init__(self, inner: LLM, cache: DiskCache, model: str):
         self.inner, self.cache, self.model = inner, cache, model
         self.hits = self.misses = 0

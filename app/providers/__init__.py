@@ -64,6 +64,7 @@ def _embed_inner(s: Settings) -> tuple[Embedder, str, object]:
 
 
 def _llm_inner(s: Settings) -> tuple[LLM, str, object]:
+    """Return (raw chat model, model name for the cache key, rate-limit classifier) for `LLM_PROVIDER`."""
     backend = s.llm_backend
     if backend == "gemini":
         from .gemini import GeminiLLM, is_rate_limited

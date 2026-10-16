@@ -14,20 +14,26 @@ from pathlib import Path
 
 
 def make_key(*parts: str) -> str:
+    """Hash the parts into one cache key (a 0x1f separator keeps ("ab", "c") apart from ("a", "bc"))."""
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
 def pack_vector(v: list[float]) -> bytes:
+    """Serialize an embedding to float32 bytes for storage."""
     return array.array("f", v).tobytes()  # float32: half the space, plenty for cosine search
 
 
 def unpack_vector(blob: bytes) -> list[float]:
+    """Inverse of `pack_vector`."""
     a = array.array("f")
     a.frombytes(blob)
     return a.tolist()
 
 
 class DiskCache:
+    """A tiny key-value store in one SQLite file. Safe to share between threads (one lock);
+    `:memory:` gives a throwaway cache for tests."""
+
     def __init__(self, path: str | Path):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -39,11 +45,13 @@ class DiskCache:
         self._lock = threading.Lock()
 
     def get(self, key: str) -> bytes | None:
+        """Return the stored value, or None if the key was never set."""
         with self._lock:
             row = self._db.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
         return row[0] if row else None
 
     def set(self, key: str, value: bytes) -> None:
+        """Store (or overwrite) a value and commit at once, so a crash never loses a paid-for result."""
         with self._lock:
             self._db.execute("INSERT OR REPLACE INTO kv(key, value) VALUES (?, ?)", (key, value))
             self._db.commit()

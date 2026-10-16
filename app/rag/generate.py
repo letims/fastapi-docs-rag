@@ -1,3 +1,6 @@
+"""Answer generation: the system prompt (answer only from numbered passages, cite as [n],
+abstain with INSUFFICIENT_CONTEXT), citation parsing and the `Answer` result."""
+
 import re
 import time
 from dataclasses import dataclass, field
