@@ -169,6 +169,34 @@ QUOTA_PRESETS: dict[tuple[str, str], tuple[int, int, int, str]] = {
     ("llm", "openai_compat"): (15, 8_000, 150, "text"),
 }
 
+# List price in USD per 1M tokens (input, output), keyed "provider:model". Evals report cost as a
+# list-price equivalent even on free tiers, so a provider or prompt change shows up as a cost delta.
+# Embedding and rerank calls are not priced: at $0.02/1M (Voyage lite) they are <1% of a query.
+PRICES_AS_OF = "2026-10-20"
+PRICES: dict[str, tuple[float, float]] = {
+    "groq:openai/gpt-oss-20b": (0.075, 0.30),
+    "fake:fake": (0.0, 0.0),
+}
+
+
+def llm_model_key(s: "Settings") -> str:
+    """`provider:model` of the configured LLM, the key into `PRICES`."""
+    backend = s.llm_backend
+    model = {
+        "groq": s.groq_model,
+        "gemini": s.gemini_llm_model,
+        "openai_compat": s.openai_compat_model,
+    }.get(backend, "fake")
+    return f"{backend}:{model}"
+
+
+def cost_usd(key: str, input_tokens: int, output_tokens: int) -> float | None:
+    """List-price cost of one call's tokens, or None when `key` has no price row."""
+    if key not in PRICES:
+        return None
+    p_in, p_out = PRICES[key]
+    return round((input_tokens * p_in + output_tokens * p_out) / 1_000_000, 7)
+
 
 @lru_cache
 def get_settings() -> Settings:

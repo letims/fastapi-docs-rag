@@ -1,0 +1,76 @@
+name: eval
+# Real retrieval eval on PRs that can change retrieval quality. Retrieval only: never calls the LLM.
+# Index = 40-doc dev subset (every eval-expected doc + seeded distractors), so it fits Voyage's free tier.
+on:
+  pull_request:
+    paths:
+      - "app/rag/**"
+      - "app/ingest/**"
+      - "app/providers/**"
+      - "app/config.py"
+      - "evals/**"
+      - "sql/**"
+permissions:
+  contents: read
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  retrieval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: docsrag, POSTGRES_PASSWORD: docsrag, POSTGRES_DB: docsrag }
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U docsrag" --health-interval 3s
+          --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://docsrag:docsrag@localhost:5433/docsrag
+      VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+      EMBED_PROVIDER: voyage
+      EMBED_DIM: "1024"
+      BASELINE: evals/baseline/ci-dev40-rerank.json
+    steps:
+      - name: Skip without the Voyage key (fork PRs get no secrets)
+        id: key
+        run: |
+          if [ -z "$VOYAGE_API_KEY" ]; then echo "::notice::VOYAGE_API_KEY not set: eval skipped"; echo "ok=false" >> "$GITHUB_OUTPUT"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.key.outputs.ok == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - if: steps.key.outputs.ok == 'true'
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - if: steps.key.outputs.ok == 'true'
+        run: uv sync --locked
+      # Embeddings are cached by content hash, so restoring any older cache is safe: only new or
+      # changed chunks (and new questions) are paid for. A fresh key per run saves the grown cache.
+      - if: steps.key.outputs.ok == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/api_cache.sqlite
+          key: evalcache-${{ github.run_id }}
+          restore-keys: evalcache-
+      - name: Index the dev subset
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          command -v cpio >/dev/null || sudo apt-get install -y -q cpio   # used by fetch_corpus.sh
+          make corpus
+          make init
+          uv run python -m scripts.enqueue_corpus corpus/fastapi --subset 40
+          make worker
+      - name: Retrieval eval (rerank) vs CI baseline
+        if: steps.key.outputs.ok == 'true'
+        run: |
+          set -o pipefail
+          uv run python -m evals.run_eval --mode rerank
+          if [ ! -f "$BASELINE" ]; then
+            echo "::notice::No CI baseline yet. Download the eval-results artifact and run: make eval-baseline RUN=<file> then rename to ci-dev40-rerank.json (or use --name ci-dev40-rerank)"
+            exit 0
+          fi
+          uv run python -m evals.compare --latest rerank --baseline "$BASELINE" | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: always() && steps.key.outputs.ok == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: eval-results, path: evals/results/rerank-*.json }

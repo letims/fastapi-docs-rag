@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(make check)",
+      "Bash(make test)",
+      "Bash(make test-fast)",
+      "Bash(make lint)",
+      "Bash(make validate-json)",
+      "Bash(uv run check-jsonschema *)",
+      "Bash(make fmt)",
+      "Bash(make eval)",
+      "Bash(make eval MODE=*)",
+      "Bash(make eval-compare *)",
+      "Bash(uv run python -m evals.compare *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh run view *)"
+    ],
+    "ask": [
+      "Bash(gh pr create *)",
+      "Bash(make init)",
+      "Edit(/sql/**)",
+      "Bash(make enqueue*)",
+      "Bash(make worker*)",
+      "Bash(uv run python -m app.worker *)",
+      "Bash(uv run python -m scripts.enqueue_corpus *)",
+      "Bash(make eval-gen*)",
+      "Bash(make eval-agent*)",
+      "Bash(make eval-baseline*)",
+      "Bash(uv run python -m evals.run_eval *)",
+      "Bash(make load-test*)",
+      "Bash(psql *)",
+      "Bash(docker compose down*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Edit(./.env)",
+      "Read(./secrets/**)",
+      "Edit(./secrets/**)",
+      "Read(./.cache/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gcloud/**)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git commit *)",
+      "Bash(git am *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git rebase *)",
+      "Bash(git merge *)",
+      "Bash(git revert *)",
+      "Bash(git push *)",
+      "Bash(gh pr merge *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "excludedCommands": ["docker *"],
+    "filesystem": {
+      "allowWrite": ["~/.cache/uv"]
+    },
+    "network": {
+      "allowedDomains": [
+        "pypi.org",
+        "files.pythonhosted.org",
+        "github.com",
+        "api.voyageai.com",
+        "api.groq.com",
+        "json.schemastore.org"
+      ]
+    },
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws", "mode": "deny" },
+        { "path": "~/.config/gcloud", "mode": "deny" }
+      ]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write",
+        "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_guard.py\"" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/post_edit_ruff.py\"" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_unit_tests.py\"", "timeout": 120 }]
+      }
+    ]
+  }
+}

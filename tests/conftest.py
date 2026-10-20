@@ -22,6 +22,13 @@ from app.providers.fake import FakeEmbedder
 DIM = 64
 
 
+def pytest_collection_modifyitems(items):
+    """Mark every test that needs Postgres as `db`, so `-m "not db"` is a ~5 s unit run (Stop hook)."""
+    for item in items:
+        if "db_url" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.db)
+
+
 @pytest.fixture(autouse=True)
 def _ignore_dotenv(monkeypatch):
     """Tests must not depend on (or leak) the developer's real `.env`: keys, providers, limits."""

@@ -21,12 +21,14 @@ dev = [
   "pytest-cov>=5",
   "ruff>=0.6",
   "pgserver>=0.1.4",  # throwaway Postgres + pgvector for tests when Docker is not around
+  "check-jsonschema>=0.38.2",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["db: needs Postgres (auto-applied in conftest.py); `-m 'not db'` is the fast unit run"]
 
 [tool.coverage.run]
 source = ["app", "scripts", "evals"]
