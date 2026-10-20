@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     progress_interval_s: float = 30.0
 
+    # Sentry error/trace reporting. Empty DSN = off. Set the release with the SENTRY_RELEASE env var.
+    sentry_dsn: str = ""
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1
+
     # Files that add noise to retrieval (changelogs, people lists, translation test pages)
     corpus_exclude: tuple[str, ...] = (
         "_llm-test.md",

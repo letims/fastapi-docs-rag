@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.db import close_pool, init_schema, open_pool
 from app.ingest import queue
 from app.logging_config import setup_logging
+from app.observability import setup_sentry
 from app.providers import get_embedder, get_llm, get_reranker
 from app.quota import QuotaExhausted, seconds_until_reset
 from app.rag.agent import run_agent
@@ -19,6 +20,8 @@ from app.rag.generate import generate_answer
 from app.rag.retrieve import search
 
 log = logging.getLogger(__name__)
+
+setup_sentry()  # before the app is created so the FastAPI integration can hook in
 
 
 @asynccontextmanager

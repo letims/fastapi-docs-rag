@@ -9,7 +9,10 @@ pass or fail for the wrong reasons."""
 
 import os
 
-import pytest
+# Before any `app` import: tests must never report to the real Sentry project.
+os.environ["SENTRY_DSN"] = ""
+
+import pytest  # noqa: E402
 
 import app.db as db
 import app.providers as providers
