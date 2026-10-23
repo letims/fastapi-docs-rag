@@ -13,6 +13,14 @@ Every entry point (`make worker`, `make api`, `make eval*`, the enqueue script) 
 Secrets never appear in logs. Question text (first 60 characters) is logged at `INFO`; use
 `LOG_LEVEL=WARNING` where that is not acceptable.
 
+## Sentry (errors and traces)
+
+`setup_sentry()` in `app/observability.py` runs when the API module loads. It does nothing unless
+`SENTRY_DSN` is set, so tests and `PROVIDER=fake` runs never send events. `SENTRY_ENVIRONMENT`
+(default `development`) and `SENTRY_TRACES_SAMPLE_RATE` (default `0.1`) are settings too; set the
+release with the `SENTRY_RELEASE` env var at deploy time. Request bodies, local variables and PII
+are off, because they can hold prompts and document text.
+
 ## What a worker run looks like
 
 ```
