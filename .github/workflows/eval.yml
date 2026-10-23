@@ -18,6 +18,7 @@ concurrency:
 jobs:
   retrieval:
     runs-on: ubuntu-latest
+    environment: ci   # VOYAGE_API_KEY lives in this environment, so only this job can read it
     timeout-minutes: 45
     services:
       db:
