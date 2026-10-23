@@ -40,10 +40,12 @@ Status and results: README. Detail: `docs/` (architecture, ingestion, quotas, co
 - Provider/quota work: see `.claude/rules/providers-quotas.md` (loads when you touch those files)
 
 ## Workflow
-- **Never commit, amend, rebase, merge, cherry-pick, `git am` or push.** Leave every change uncommitted in the
-  working tree so the user reviews the diff and commits it herself. Suggest a commit message instead.
-  Only exception: the `@claude` GitHub workflow, when the user explicitly mentions @claude on an issue or PR
-- Plan mode for anything touching more than two files. Commit messages you suggest: English, imperative mood
+- Work autonomously; control comes from verification (Stop hook, `make check`, `make eval-compare`), not
+  from approving each step. Plan first only when a task is ambiguous, irreversible or spends API money
+- Git: commit freely on a feature branch (`git switch -c claude/<topic>`), small commits, English, imperative
+  mood. Never commit on `main`, never push, never delete or force-move branches: the user reviews the
+  branch diff and pushes herself. The `@claude` GitHub workflow commits only when she mentions @claude
+- Competing ideas (e.g. two retrieval tweaks): run subagents in parallel worktrees, compare their evals
 - Review retrieval/prompt diffs with the `rag-eval-reviewer` subagent; triage test failures with `test-runner`
 - GitHub through `gh`, DB through `psql` (both permission-gated). No MCP servers on purpose: nothing here needs one
 - Secrets live only in `.env` (read-denied to Claude). Free-tier Gemini may train on inputs: public docs only

@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: docsrag
       POSTGRES_DB: docsrag
     ports:
-      - "5433:5432"   # 5433 on the host so it never clashes with a local Postgres
+      - "127.0.0.1:5433:5432"   # localhost only (default creds); 5433 so it never clashes with a local Postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

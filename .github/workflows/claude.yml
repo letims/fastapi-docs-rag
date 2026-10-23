@@ -17,7 +17,12 @@ concurrency:
   group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
 jobs:
   claude:
-    if: contains(github.event.comment.body, '@claude')
+    # Only the repo owner, and only on issues/PRs the owner wrote: issue and PR text is prompt input,
+    # so text from other authors must not be able to steer a job that can commit.
+    if: >-
+      contains(github.event.comment.body, '@claude') &&
+      github.event.comment.user.login == github.repository_owner &&
+      (github.event.issue.user.login || github.event.pull_request.user.login) == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

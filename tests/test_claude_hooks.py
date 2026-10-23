@@ -25,6 +25,12 @@ def _bash(cmd):
     return {"tool_name": "Bash", "tool_input": {"command": cmd}}
 
 
+@pytest.fixture(autouse=True)
+def _on_feature_branch(monkeypatch):
+    """Pin the branch so results don't depend on what CI or the dev has checked out."""
+    monkeypatch.setattr(guard, "current_branch", lambda cwd: "claude/topic")
+
+
 @pytest.mark.parametrize(
     "cmd",
     [
@@ -36,19 +42,13 @@ def _bash(cmd):
         "git -C . push origin +main",
         "git push origin main --force-with-lease",
         "git reset --hard HEAD~3",
-        "git commit --no-verify -m wip",
-        "git commit -m 'Add cap'",
-        "git commit --amend --no-edit",
-        "git -C . commit -m x",
-        "git -c user.name=x commit -m y",
-        "make check && git commit -am done",
-        "git am change.patch",
-        "git cherry-pick abc123",
-        "git rebase main",
-        "git merge feature",
-        "git revert HEAD",
         "git push origin claude-code-setup",
-        "bash -c 'git commit -m x'",
+        "git -C . push",
+        "git branch -D claude-code-setup",
+        "git branch -f main HEAD",
+        "git update-ref refs/heads/main HEAD",
+        "git switch main && git merge claude/topic",
+        "git checkout main; git commit -am x",
         "psql $DATABASE_URL -c 'DROP TABLE chunks'",
         "echo 'truncate table documents' | psql",
         "docker compose down -v",
@@ -65,6 +65,14 @@ def _bash(cmd):
         "cat ~/.config/gcloud/credentials.db",
         "sqlite3 .cache/api_cache.sqlite .dump",
         "cat secrets/prod.json",
+        "docker run --rm -v ~:/h alpine cat /h/.ssh/id_ed25519",
+        "docker cp db:/etc/passwd .",
+        "docker exec -it db psql",
+        "docker compose run --rm db sh",
+        "docker-compose exec db sh",
+        "docker container run alpine",
+        "ls && docker run alpine",
+        "sh -c 'docker run alpine'",
     ],
 )
 def test_guard_blocks(cmd):
@@ -82,15 +90,64 @@ def test_guard_blocks(cmd):
         "git log --oneline -5",
         "git add -p app/rag/retrieve.py",
         "grep -rn 'git commit' docs/",
+        "git switch -c claude/cap-per-source",
+        "git commit -m 'Add cap'",
+        "git commit --amend --no-edit",
+        "git -C . commit -m x",
+        "make check && git commit -am done",
+        "git rebase main",
+        "git merge main",
+        "git cherry-pick abc123",
+        "git revert HEAD",
+        "git branch claude/new-idea",
         "git diff --stat",
         "rm build/tmp.txt",
         "grep -rn 'curl' docs/",
         "uv run python -m evals.compare evals/results/x.json",
         "ruff check app/rag/retrieve.py",
+        "docker compose up -d --wait",
+        "docker compose ps",
+        "docker compose logs db",
+        "grep -rn 'docker run' docs/",
     ],
 )
 def test_guard_allows(cmd):
     assert guard.check(_bash(cmd)) is None
+
+
+@pytest.mark.parametrize("branch", ["main", "master"])
+@pytest.mark.parametrize(
+    "cmd", ["git commit -m x", "git merge claude/topic", "git pull", "git am x.patch"]
+)
+def test_guard_blocks_commits_on_protected_branches(monkeypatch, branch, cmd):
+    monkeypatch.setattr(guard, "current_branch", lambda cwd: branch)
+    assert "feature branch" in guard.check(_bash(cmd))
+
+
+@pytest.mark.parametrize("branch", ["claude-code-setup", "claude/topic"])
+def test_guard_allows_commits_on_feature_branches(monkeypatch, branch):
+    monkeypatch.setattr(guard, "current_branch", lambda cwd: branch)
+    assert guard.check(_bash("git commit -m x")) is None
+
+
+@pytest.mark.parametrize("branch", ["", None])  # detached HEAD, not a repo / git failed
+def test_guard_blocks_commits_when_branch_unknown(monkeypatch, branch):
+    monkeypatch.setattr(guard, "current_branch", lambda cwd: branch)
+    assert "cannot tell which branch" in guard.check(_bash("git commit -m x"))
+    assert guard.check(_bash("make check")) is None  # non-commit commands are unaffected
+
+
+def test_current_branch_reads_git(tmp_path, monkeypatch):
+    real = _load("pre_tool_guard").current_branch
+    assert real(str(tmp_path)) is None  # not a repo
+    subprocess.run(["git", "init", "-q", "-b", "claude/x"], cwd=tmp_path, check=True)
+    assert real(str(tmp_path)) == "claude/x"
+
+    def boom(*a, **k):
+        raise OSError("no git")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    assert real(str(tmp_path)) is None
 
 
 @pytest.mark.parametrize(
@@ -102,11 +159,31 @@ def test_guard_allows(cmd):
         ("Read", "/Users/l/.ssh/config", True),
         ("Read", "/repo/.env.example", False),
         ("Edit", "/repo/app/rag/retrieve.py", False),
-        ("Grep", "/repo/.env", False),  # Grep is not guarded here; settings deny covers Read
     ],
 )
 def test_guard_file_tools(tool, path, blocked):
     event = {"tool_name": tool, "tool_input": {"file_path": path}}
+    assert (guard.check(event) is not None) is blocked
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input", "blocked"),
+    [
+        ("Grep", {"pattern": "KEY", "path": "/repo/.env"}, True),
+        ("Grep", {"pattern": "KEY", "glob": ".env*"}, True),
+        ("Grep", {"pattern": "KEY", "path": "/Users/l/.ssh"}, True),
+        ("Glob", {"pattern": "**/.env"}, True),
+        ("Glob", {"pattern": "*", "path": "/Users/l/.aws"}, True),
+        ("NotebookEdit", {"notebook_path": "/repo/secrets/x.ipynb"}, True),
+        ("Grep", {"pattern": r"\.env", "path": "app"}, False),  # a regex about .env is not a path
+        ("Grep", {"pattern": "retrieve", "glob": "*.py"}, False),
+        ("Glob", {"pattern": "**/*.md"}, False),
+        ("Glob", {"pattern": "**/.env.example"}, False),
+        ("Grep", {"pattern": "x"}, False),  # no path given: ripgrep skips gitignored .env
+    ],
+)
+def test_guard_search_tools(tool, tool_input, blocked):
+    event = {"tool_name": tool, "tool_input": tool_input}
     assert (guard.check(event) is not None) is blocked
 
 
@@ -125,6 +202,15 @@ def test_guard_exit_codes():
     assert blocked.returncode == 2 and "force-push" in blocked.stderr
     assert _run("pre_tool_guard", _bash("make check")).returncode == 0
     assert _run("pre_tool_guard", "not json").returncode == 2  # fail closed
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ["[]", '{"tool_name": "Bash", "tool_input": "oops"}', '{"tool_name": "Grep", "tool_input": 5}'],
+)
+def test_guard_blocks_on_internal_error(payload):
+    res = _run("pre_tool_guard", payload)
+    assert res.returncode == 2 and "internal error" in res.stderr  # a crash must not allow
 
 
 def test_post_edit_ignores_non_python(tmp_path):
@@ -164,3 +250,42 @@ def test_stop_hook_runs_unit_tests(tmp_path, monkeypatch, capsys, body, code):
     assert stop.main() == code
     if code:
         assert "Unit tests fail" in capsys.readouterr().err
+
+
+REPO = Path(__file__).parents[1]
+
+
+def _settings():
+    return json.loads((REPO / ".claude" / "settings.json").read_text())
+
+
+def test_settings_deny_web_and_container_escape_hatches():
+    deny = _settings()["permissions"]["deny"]
+    for rule in (
+        "WebFetch",
+        "WebSearch",
+        "Bash(docker run *)",
+        "Bash(docker cp *)",
+        "Bash(docker exec *)",
+    ):
+        assert rule in deny, rule
+
+
+def test_settings_guard_covers_search_tools_and_protects_ci_and_git_hooks():
+    cfg = _settings()
+    matcher = cfg["hooks"]["PreToolUse"][0]["matcher"].split("|")
+    assert {"Bash", "Read", "Edit", "Write", "NotebookEdit", "Grep", "Glob"} <= set(matcher)
+    assert {"./.githooks", "./.github"} <= set(cfg["sandbox"]["filesystem"]["denyWrite"])
+    ask = cfg["permissions"]["ask"]
+    assert "Edit(/.claude/hooks/**)" in ask and "Edit(/.github/workflows/**)" in ask
+
+
+def test_compose_publishes_postgres_on_localhost_only():
+    text = (REPO / "docker-compose.yml").read_text()
+    assert '"127.0.0.1:5433:5432"' in text
+    assert '- "5433:5432"' not in text  # would listen on every interface with default creds
+
+
+def test_claude_workflow_is_owner_only():
+    text = (REPO / ".github" / "workflows" / "claude.yml").read_text()
+    assert text.count("github.repository_owner") >= 2  # commenter and issue/PR author

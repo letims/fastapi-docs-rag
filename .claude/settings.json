@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(uv run pytest *)",
       "Bash(uv run ruff *)",
@@ -18,7 +19,17 @@
       "Bash(gh pr view *)",
       "Bash(gh pr diff *)",
       "Bash(gh pr checks *)",
-      "Bash(gh run view *)"
+      "Bash(gh run view *)",
+      "Bash(git switch -c *)",
+      "Bash(git checkout -b *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(docker compose up *)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs *)"
     ],
     "ask": [
       "Bash(gh pr create *)",
@@ -34,7 +45,11 @@
       "Bash(uv run python -m evals.run_eval *)",
       "Bash(make load-test*)",
       "Bash(psql *)",
-      "Bash(docker compose down*)"
+      "Bash(docker compose down*)",
+      "Edit(/.claude/hooks/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.githooks/**)",
+      "Edit(/.github/workflows/**)"
     ],
     "deny": [
       "Read(./.env)",
@@ -56,14 +71,19 @@
       "Bash(git push * --force*)",
       "Bash(git push * -f*)",
       "Bash(git reset --hard*)",
-      "Bash(git commit *)",
-      "Bash(git am *)",
-      "Bash(git cherry-pick *)",
-      "Bash(git rebase *)",
-      "Bash(git merge *)",
-      "Bash(git revert *)",
       "Bash(git push *)",
-      "Bash(gh pr merge *)"
+      "Bash(gh pr merge *)",
+      "Bash(git branch -D *)",
+      "Bash(git branch -f *)",
+      "Bash(git update-ref *)",
+      "WebFetch",
+      "WebSearch",
+      "Bash(docker run *)",
+      "Bash(docker cp *)",
+      "Bash(docker exec *)",
+      "Bash(docker container *)",
+      "Bash(docker compose run *)",
+      "Bash(docker compose exec *)"
     ]
   },
   "sandbox": {
@@ -71,7 +91,8 @@
     "allowUnsandboxedCommands": false,
     "excludedCommands": ["docker *"],
     "filesystem": {
-      "allowWrite": ["~/.cache/uv"]
+      "allowWrite": ["~/.cache/uv"],
+      "denyWrite": ["./.githooks", "./.github"]
     },
     "network": {
       "allowedDomains": [
@@ -94,7 +115,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Edit|Write",
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
         "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pre_tool_guard.py\"" }]
       }
     ],
