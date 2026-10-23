@@ -1,0 +1,332 @@
+{
+  "source_run": "rerank-gen-1791832103.json",
+  "summary": {
+    "mode": "rerank",
+    "agent": false,
+    "rerank_max_per_source": 0,
+    "k": 5,
+    "n_answerable": 17,
+    "hit@k": 1.0,
+    "full_recall@k": 0.941,
+    "mrr": 0.941,
+    "cited_ok": 0.882,
+    "false_abstain": 0.059,
+    "abstain_rate_unanswerable": 1.0,
+    "input_tokens": 24919,
+    "output_tokens": 8150,
+    "avg_latency_s": 20.01,
+    "llm_api_requests": 19
+  },
+  "rows": [
+    {
+      "id": "q01",
+      "type": "single",
+      "expected_sources": [
+        "advanced/events.md"
+      ],
+      "retrieved": [
+        "advanced/events.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q02",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "tutorial/background-tasks.md",
+        "reference/background.md",
+        "advanced/advanced-dependencies.md",
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q03",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/cors.md"
+      ],
+      "retrieved": [
+        "tutorial/cors.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q04",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/response-model.md"
+      ],
+      "retrieved": [
+        "tutorial/response-model.md",
+        "tutorial/body-updates.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q05",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "retrieved": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "advanced/advanced-dependencies.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q06",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/security/first-steps.md"
+      ],
+      "retrieved": [
+        "tutorial/security/first-steps.md",
+        "tutorial/security/simple-oauth2.md",
+        "tutorial/security/oauth2-jwt.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q07",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/testing.md"
+      ],
+      "retrieved": [
+        "tutorial/testing.md",
+        "reference/testclient.md",
+        "deployment/versions.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q08",
+      "type": "single",
+      "expected_sources": [
+        "advanced/testing-websockets.md"
+      ],
+      "retrieved": [
+        "advanced/testing-websockets.md",
+        "advanced/websockets.md",
+        "reference/websockets.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q09",
+      "type": "single",
+      "expected_sources": [
+        "deployment/docker.md"
+      ],
+      "retrieved": [
+        "deployment/docker.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q10",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/handling-errors.md"
+      ],
+      "retrieved": [
+        "tutorial/handling-errors.md",
+        "advanced/response-change-status-code.md",
+        "advanced/additional-status-codes.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q11",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/static-files.md"
+      ],
+      "retrieved": [
+        "reference/staticfiles.md",
+        "tutorial/static-files.md",
+        "how-to/custom-docs-ui-assets.md",
+        "advanced/templates.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 2
+    },
+    {
+      "id": "q12",
+      "type": "single",
+      "expected_sources": [
+        "tutorial/dependencies/global-dependencies.md"
+      ],
+      "retrieved": [
+        "tutorial/dependencies/global-dependencies.md",
+        "tutorial/bigger-applications.md",
+        "tutorial/dependencies/dependencies-in-path-operation-decorators.md",
+        "tutorial/dependencies/index.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q13",
+      "type": "single",
+      "expected_sources": [
+        "advanced/wsgi.md"
+      ],
+      "retrieved": [
+        "advanced/wsgi.md",
+        "advanced/behind-a-proxy.md",
+        "advanced/sub-applications.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q14",
+      "type": "multi",
+      "expected_sources": [
+        "advanced/testing-dependencies.md",
+        "tutorial/testing.md"
+      ],
+      "retrieved": [
+        "advanced/testing-dependencies.md",
+        "advanced/settings.md",
+        "tutorial/testing.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q15",
+      "type": "multi",
+      "expected_sources": [
+        "tutorial/security/oauth2-jwt.md",
+        "tutorial/security/get-current-user.md"
+      ],
+      "retrieved": [
+        "tutorial/security/oauth2-jwt.md",
+        "tutorial/security/simple-oauth2.md",
+        "tutorial/security/get-current-user.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q16",
+      "type": "multi",
+      "expected_sources": [
+        "tutorial/dependencies/dependencies-with-yield.md",
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "advanced/advanced-dependencies.md",
+        "tutorial/dependencies/dependencies-with-yield.md"
+      ],
+      "hit": true,
+      "full_recall": false,
+      "rank": 2
+    },
+    {
+      "id": "q17",
+      "type": "partial",
+      "expected_sources": [
+        "tutorial/background-tasks.md"
+      ],
+      "retrieved": [
+        "tutorial/background-tasks.md",
+        "reference/background.md",
+        "deployment/server-workers.md"
+      ],
+      "hit": true,
+      "full_recall": true,
+      "rank": 1
+    },
+    {
+      "id": "q18",
+      "type": "unanswerable",
+      "expected_sources": [],
+      "retrieved": [
+        "advanced/middleware.md",
+        "index.md",
+        "tutorial/index.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null
+    },
+    {
+      "id": "q19",
+      "type": "unanswerable",
+      "expected_sources": [],
+      "retrieved": [
+        "advanced/behind-a-proxy.md",
+        "index.md",
+        "advanced/opentelemetry.md",
+        "how-to/extending-openapi.md",
+        "deployment/docker.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null
+    },
+    {
+      "id": "q20",
+      "type": "unanswerable",
+      "expected_sources": [],
+      "retrieved": [
+        "tutorial/dependencies/index.md",
+        "tutorial/middleware.md",
+        "how-to/extending-openapi.md",
+        "reference/dependencies.md",
+        "tutorial/security/index.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null
+    },
+    {
+      "id": "q21",
+      "type": "unanswerable",
+      "expected_sources": [],
+      "retrieved": [
+        "advanced/middleware.md",
+        "index.md",
+        "tutorial/server-sent-events.md",
+        "tutorial/stream-json-lines.md",
+        "reference/sse.md"
+      ],
+      "hit": false,
+      "full_recall": false,
+      "rank": null
+    }
+  ]
+}

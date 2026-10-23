@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Eval run or baseline",
+  "description": "What evals/run_eval.py writes and evals/compare.py reads. Fields compare.py depends on are required.",
+  "type": "object",
+  "required": ["summary", "rows"],
+  "properties": {
+    "source_run": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": ["mode", "k", "n_answerable", "hit@k", "full_recall@k", "mrr"],
+      "properties": {
+        "mode": { "enum": ["vector", "hybrid", "rerank"] },
+        "k": { "type": "integer", "minimum": 1 },
+        "n_answerable": { "type": "integer", "minimum": 0 },
+        "hit@k": { "$ref": "#/$defs/rate" },
+        "full_recall@k": { "$ref": "#/$defs/rate" },
+        "mrr": { "$ref": "#/$defs/rate" },
+        "cited_ok": { "$ref": "#/$defs/rate" },
+        "false_abstain": { "$ref": "#/$defs/rate" },
+        "abstain_rate_unanswerable": { "$ref": "#/$defs/rate" },
+        "grounded_rate": { "anyOf": [{ "$ref": "#/$defs/rate" }, { "type": "null" }] },
+        "cost_per_query_usd": { "type": ["number", "null"], "minimum": 0 },
+        "provenance": {
+          "type": "object",
+          "required": ["git_sha", "settings_hash", "questions_hash", "corpus"],
+          "properties": {
+            "git_sha": { "type": "string" },
+            "settings_hash": { "type": "string" },
+            "questions_hash": { "type": "string" },
+            "corpus": {
+              "type": "object",
+              "required": ["documents", "chunks"],
+              "properties": {
+                "documents": { "type": "integer", "minimum": 0 },
+                "chunks": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "expected_sources": { "type": "array", "items": { "type": "string" } },
+          "hit": { "type": "boolean" },
+          "full_recall": { "type": "boolean" },
+          "rank": { "type": ["integer", "null"], "minimum": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rate": { "type": "number", "minimum": 0, "maximum": 1 }
+  }
+}

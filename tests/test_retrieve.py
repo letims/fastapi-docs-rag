@@ -210,7 +210,7 @@ async def test_eval_runs_the_new_modes(pool, emb, tmp_path, monkeypatch, mode):
     monkeypatch.setattr(run_eval, "RESULTS", tmp_path)
     monkeypatch.setattr(sys, "argv", ["run_eval", "--mode", mode, "--limit", "3", "--k", "2"])
     await run_eval.main()
-    (out,) = tmp_path.glob(f"{mode}-[0-9]*.json")
+    (out,) = [p for p in tmp_path.glob(f"{mode}-*.json") if "-gen-" not in p.name]
     data = json.loads(out.read_text())
     assert data["summary"]["mode"] == mode and len(data["rows"]) == 3
 

@@ -1,6 +1,8 @@
 import json
 import sys
+from pathlib import Path
 
+import jsonschema
 import pytest
 
 from app.ingest.pipeline import ingest_document
@@ -40,9 +42,45 @@ async def test_eval_retrieval_only_with_limit(pool, tmp_path, monkeypatch):
     monkeypatch.setattr(run_eval, "RESULTS", tmp_path)
     monkeypatch.setattr(sys, "argv", ["run_eval", "--limit", "3", "--k", "2"])
     await run_eval.main()
-    (out,) = tmp_path.glob("vector-[0-9]*.json")
+    (out,) = [p for p in tmp_path.glob("vector-*.json") if "-gen-" not in p.name]
     data = json.loads(out.read_text())
     assert len(data["rows"]) == 3 and "cited_ok" not in data["summary"]
+    schema = json.loads(
+        (Path(run_eval.__file__).parent / "schemas/eval-run.schema.json").read_text()
+    )
+    jsonschema.validate(data, schema)  # what run_eval writes must match what compare.py relies on
+    prov = data["summary"]["provenance"]
+    assert prov["corpus"] == {"documents": 3, "chunks": 3}
+    assert len(prov["settings_hash"]) == 12 and prov["settings"]["mode"] == "vector"
+    assert prov["prices_as_of"] is None and prov["settings"]["llm"] is None  # retrieval only
+    assert data["summary"]["retrieval_p95_s"] >= data["summary"]["retrieval_p50_s"] >= 0
+
+
+async def test_eval_with_judge_scores_groundedness(pool, tmp_path, monkeypatch):
+    """The fake LLM's reply is not judge JSON: grounded must be None (unknown), never a pass."""
+    await _seed(pool)
+    monkeypatch.setattr(run_eval, "RESULTS", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["run_eval", "--k", "2", "--judge", "--limit", "2"])
+    await run_eval.main()
+    (out,) = tmp_path.glob("vector-gen-*.json")
+    data = json.loads(out.read_text())
+    s = data["summary"]
+    assert s["grounded_rate"] is None and s["judged"] == "0/2" and s["judge_tokens"] > 0
+    assert s["cost_per_query_usd"] == 0.0  # fake:fake is priced at zero
+    assert all(r["grounded"] is None for r in data["rows"])
+    assert s["provenance"]["settings"]["llm"] == "fake:fake"
+
+
+def test_percentile_and_git_helpers(monkeypatch):
+    assert run_eval._pct([], 0.5) is None
+    assert run_eval._pct([3.0, 1.0, 2.0], 0.5) == 2.0
+    assert run_eval._pct([1.0, 2.0, 3.0, 4.0], 0.95) == 4.0
+
+    def boom(*a, **k):
+        raise OSError("no git")
+
+    monkeypatch.setattr(run_eval.subprocess, "run", boom)
+    assert run_eval._git("rev-parse", "HEAD") == ""
 
 
 async def test_unknown_mode_is_rejected(pool, emb):
